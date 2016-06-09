@@ -1,0 +1,14 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="src\sh_perf_test.cpp" />
+    <ClCompile Include="src\xcalc.cpp" />
+    <ClCompile Include="src\xcore.cpp" />
+    <ClCompile Include="src\xdata.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\xcalc.hpp" />
+    <ClInclude Include="src\xcore.hpp" />
+    <ClInclude Include="src\xdata.hpp" />
+  </ItemGroup>
+</Project>
