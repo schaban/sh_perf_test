@@ -22,6 +22,21 @@ float hermite(float p0, float m0, float p1, float m1, float t) {
 	return (h00*p0 + h10*m0 + h01*p1 + h11*m1);
 }
 
+float bezier01(float t, float p1, float p2) {
+	static XMMATRIX bm = {
+		{ -1.0f, 3.0f, -3.0f, 1.0f },
+		{ 3.0f, -6.0f, 3.0f, 0.0f },
+		{ -3.0f, 3.0f, 0.0f, 0.0f },
+		{ 1.0f, 0.0f, 0.0f, 0.0f }
+	};
+	float tt = t*t;
+	float ttt = tt*t;
+	XMVECTOR tv = XMVectorSet(ttt, tt, t, 1.0f);
+	tv = XMVector4Transform(tv, bm);
+	float val = p1*XMVectorGetY(tv) + p2*XMVectorGetZ(tv) + XMVectorGetW(tv);
+	return val;
+}
+
 float fit(float val, float oldMin, float oldMax, float newMin, float newMax) {
 	float rel = (val - oldMin) / (oldMax - oldMin);
 	return lerp(newMin, newMax, rel);
@@ -118,6 +133,8 @@ void cxVec::normalize(const cxVec& v) {
 	*this = n;
 }
 
+// http://lgdv.cs.fau.de/publications/publication/Pub.2010.tech.IMMD.IMMD9.onfloa/
+// http://jcgt.org/published/0003/02/01/
 XMFLOAT2 cxVec::encode_octa() const {
 	XMFLOAT2 oct;
 	cxVec av = abs_val();
@@ -1389,11 +1406,19 @@ double calc_constB(int m) {
 }
 
 double calc_constC1(int l, int m) {
-	return calc_K(l, m) / calc_K(l-1, m) * double(2*l-1) / double(l-m);
+	double c = calc_K(l, m) / calc_K(l-1, m) * double(2*l-1) / double(l-m);
+	if (l > 80) {
+		if (::isnan(c)) c = 0.0;
+	}
+	return c;
 }
 
 double calc_constC2(int l, int m) {
-	return -calc_K(l, m) / calc_K(l-2, m) * double(l+m-1) / double(l-m);
+	double c = -calc_K(l, m) / calc_K(l-2, m) * double(l+m-1) / double(l-m);
+	if (l > 80) {
+		if (::isnan(c)) c = 0.0;
+	}
+	return c;
 }
 
 double calc_constD1(int m) {
@@ -1634,6 +1659,8 @@ _XD_SHEVAL_FUNC(50)
 _XD_SHEVAL_FUNC(60)
 _XD_SHEVAL_FUNC(70)
 _XD_SHEVAL_FUNC(80)
+_XD_SHEVAL_FUNC(90)
+_XD_SHEVAL_FUNC(100)
 
 #define _XD_SHEVAL_CASE(_ord_) case _ord_: eval##_ord_(pCoef, x, y, z); break;
 
@@ -1664,6 +1691,8 @@ void eval(int order, float* pCoef, float x, float y, float z) {
 		_XD_SHEVAL_CASE(60)
 		_XD_SHEVAL_CASE(70)
 		_XD_SHEVAL_CASE(80)
+		_XD_SHEVAL_CASE(90)
+		_XD_SHEVAL_CASE(100)
 	}
 }
 

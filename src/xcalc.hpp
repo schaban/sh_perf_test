@@ -142,7 +142,7 @@ inline float rcp0(float x) { return div0(1.0f, x); }
 inline float lerp(float a, float b, float t) { return a + (b - a)*t; }
 
 float hermite(float p0, float m0, float p1, float m1, float t);
-
+float bezier01(float t, float p1, float p2);
 float fit(float val, float oldMin, float oldMax, float newMin, float newMax);
 
 float calc_fovy(float focal, float aperture, float aspect);
@@ -1055,6 +1055,8 @@ namespace nxSH {
 
 inline int calc_coefs_num(int order) { return order < 1 ? 0 : nxCalc::sq(order); }
 inline int calc_ary_idx(int l, int m) { return l*(l+1) + m; }
+inline int band_idx_from_ary_idx(int idx) { return (int)::sqrtf((float)idx); }
+inline int func_idx_from_ary_band(int idx, int l) { return idx - l*(l + 1); }
 double calc_K(int l, int m);
 
 #define XD_SHEVAL_F64 0
@@ -1089,7 +1091,7 @@ void eval(int order, double* pCoef, double x, double y, double z);
 #endif
 
 void project_polar_map(int order, float* pCoefR, float* pCoefG, float* pCoefB, cxColor* pMap, int w, int h, float* pTmp = nullptr);
-void calc_weights(float* pWgt, int order, float s, float scl = XD_PI);
+void calc_weights(float* pWgt, int order, float s, float scl = 1.0f);
 void apply_weights(float* pDst, int order, const float* pSrc, const float* pWgt);
 float dot(int order, float* pA, float* pB);
 
@@ -1105,8 +1107,8 @@ struct sxSHIdx {
 	int get_func_idx() const { return m; }
 	int get_ary_idx() const { return nxSH::calc_ary_idx(l, m); }
 	void from_ary_idx(int idx) {
-		l = (int)::sqrtf((float)idx);
-		m = idx - l*(l + 1);
+		l = nxSH::band_idx_from_ary_idx(idx);
+		m = nxSH::func_idx_from_ary_band(idx, l);
 	}
 
 	double calc_K() const { return nxSH::calc_K(l, m); }

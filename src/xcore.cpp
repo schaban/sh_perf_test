@@ -98,15 +98,8 @@ void fpu_init() {
 }
 
 void cpu_serialize() {
-#if defined (__GNUC__) || defined(_WIN64)
 	int dummy[4];
 	__cpuid(dummy, 0);
-#else
-	__asm {
-		sub eax, eax
-			cpuid
-	}
-#endif
 }
 
 int64_t get_timestamp() {

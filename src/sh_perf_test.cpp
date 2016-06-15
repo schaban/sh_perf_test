@@ -16,7 +16,7 @@ static cxVec eval_pol_color(const sxGeometryData::Polygon& pol, const cxVec& pos
 			pntIdx[i] = pol.get_vtx_pnt_id(quadInfo.get_hit_tri_vtx(i));
 		}
 	} else {
-		return false;
+		return cxVec(1.0f, 0.0f, 0.0f);
 	}
 	for (i = 0; i < 3; ++i) {
 		vtx[i] = pol.get_geo()->get_pnt(pntIdx[i]);
@@ -78,13 +78,13 @@ public:
 	}
 };
 
-cxColor sample_env_color(sxGeometryData* pEnvGeo, float u, float v, float dist) {
+cxColor sample_env_color(sxGeometryData* pEnvGeo, float u, float v, const cxVec& org, float dist) {
 	cxColor clr(0.0f);
 	cxVec dir = nxVec::from_polar_uv(u, v);
 	dir.scl(dist);
 	cEnvHitFn fn;
 	cxLineSeg ray;
-	ray.set(cxVec(0.0f), dir);
+	ray.set(org, org + dir);
 	fn.set_ray(ray);
 	pEnvGeo->hit_query(ray, fn);
 	if (fn.get_hit_flg()) {
@@ -155,25 +155,22 @@ XD_NOINLINE void sEnvCoefs::proj_env_polar(int w, int h, cxColor* pMap) {
 	nxCore::mem_free(pTmp);
 }
 
-static cxColor* sh_env_apply(const sxGeometryData& tgtGeo, const sEnvCoefs& envSH) {
-	int npnt = tgtGeo.get_pnt_num();
+static cxColor* sh_env_apply(const sxGeometryData& objGeo, const sEnvCoefs& envSH, float* pWgt) {
+	int npnt = objGeo.get_pnt_num();
 	cxColor* pPntClr = nxCore::obj_alloc<cxColor>(npnt);
 	int order = envSH.mOrder;
-	float* pWgt = nxCore::obj_alloc<float>(order);
 	float* pN = nxDataUtil::alloc_sh_coefs_f32(order);
 	float* pR = nxDataUtil::alloc_sh_coefs_f32(order);
 	float* pG = nxDataUtil::alloc_sh_coefs_f32(order);
 	float* pB = nxDataUtil::alloc_sh_coefs_f32(order);
-	if (pPntClr && pWgt && pN && pR && pG && pB) {
+	if (pPntClr && pN && pR && pG && pB) {
 		::printf("Applying SH to target obj (%d vertices).\n", npnt);
-		float s = 6.0f;
-		nxSH::calc_weights(pWgt, order, s);
 		nxSH::apply_weights(pR, order, envSH.mpR, pWgt);
 		nxSH::apply_weights(pG, order, envSH.mpG, pWgt);
 		nxSH::apply_weights(pB, order, envSH.mpB, pWgt);
 		int64_t ft0 = nxCore::get_timestamp();
 		for (int i = 0; i < npnt; ++i) {
-			cxVec nrm = tgtGeo.get_pnt_normal(i);
+			cxVec nrm = objGeo.get_pnt_normal(i);
 			nxSH::eval(order, pN, nrm.x, nrm.y, nrm.z);
 			float r = nxSH::dot(order, pN, pR);
 			float g = nxSH::dot(order, pN, pG);
@@ -185,8 +182,6 @@ static cxColor* sh_env_apply(const sxGeometryData& tgtGeo, const sEnvCoefs& envS
 		double dt = (ft1 - ft0) / freq;
 		double dtms = dt * 1000.0f;
 		::printf("Elapsed %f ms.\n", dtms);
-
-		nxCore::obj_free<float>(pWgt, order);
 		nxCore::mem_free(pN);
 		nxCore::mem_free(pR);
 		nxCore::mem_free(pG);
@@ -194,6 +189,171 @@ static cxColor* sh_env_apply(const sxGeometryData& tgtGeo, const sEnvCoefs& envS
 	}
 	return pPntClr;
 }
+
+sxDDSHead* make_env_map(sxGeometryData* pEnvGeo, int mapW, int mapH) {
+	sxDDSHead* pPolarDDS = nullptr;
+	if (pEnvGeo) {
+		::printf("Tracing environment geometry: %d polys.\n", pEnvGeo->get_pol_num());
+		uint32_t ddsSize = 0;
+		pPolarDDS = nxTexture::alloc_dds128(mapW, mapH, &ddsSize);
+		if (pPolarDDS) {
+			cxColor* pMap = reinterpret_cast<cxColor*>(pPolarDDS + 1);
+			cxAABB envBB = pEnvGeo->mBBox;
+			float envRad = envBB.get_bounding_radius();
+			cxVec envOrg = envBB.get_center();
+			int64_t ft0 = nxCore::get_timestamp();
+			for (int y = 0; y < mapH; ++y) {
+				float v = 1.0f - (y + 0.5f) / mapH;
+				for (int x = 0; x < mapW; ++x) {
+					float u = (x + 0.5f) / mapW;
+					int idx = y*mapW + x;
+					cxColor clr = sample_env_color(pEnvGeo, u, v, envOrg, envRad);
+					pMap[idx] = clr;
+				}
+			}
+			int64_t ft1 = nxCore::get_timestamp();
+			double freq = nxCore::get_perf_freq();
+			double dt = (ft1 - ft0) / freq;
+			double dtms = dt * 1000.0f;
+			::printf("Envmap creation took %f sec. (%f ms)\n", dt, dtms);
+
+			const char* pEnvMapOutPath = "../data/env_map.dds";
+			::printf("Saving envmap to \"%s\"\n", pEnvMapOutPath);
+			nxCore::bin_save(pEnvMapOutPath, pPolarDDS, ddsSize);
+		}
+	}
+	return pPolarDDS;
+}
+
+class cTestJob : public cxJob {
+public:
+	struct {
+		int mOrg;
+		int mNum;
+		int mWidth;
+		int mHeight;
+	} mMapInfo;
+	cxColor* mpMap;
+	sxGeometryData* mpGeo;
+	cxVec mEnvOrg;
+	float mEnvRad;
+
+	void exec(const Context& ctx) {
+		int mapW = mMapInfo.mWidth;
+		int mapH = mMapInfo.mHeight;
+		int y0 = mMapInfo.mOrg;
+		int y1 = y0 + mMapInfo.mNum;
+		sxGeometryData* pEnvGeo = mpGeo;
+		cxColor* pMap = mpMap;
+		for (int y = y0; y < y1; ++y) {
+			float v = 1.0f - (y + 0.5f) / mapH;
+			for (int x = 0; x < mapW; ++x) {
+				float u = (x + 0.5f) / mapW;
+				int idx = y*mapW + x;
+				cxColor clr = sample_env_color(pEnvGeo, u, v, mEnvOrg, mEnvRad);
+				pMap[idx] = clr;
+			}
+		}
+	}
+};
+
+sxDDSHead* make_env_map_mt(sxGeometryData* pEnvGeo, int mapW, int mapH) {
+	sxDDSHead* pPolarDDS = nullptr;
+	if (pEnvGeo) {
+		::printf("Tracing environment geometry (mt): %d polys.\n", pEnvGeo->get_pol_num());
+		uint32_t ddsSize = 0;
+		pPolarDDS = nxTexture::alloc_dds128(mapW, mapH, &ddsSize);
+		if (pPolarDDS) {
+			cxColor* pMap = reinterpret_cast<cxColor*>(pPolarDDS + 1);
+			cxAABB envBB = pEnvGeo->mBBox;
+			float envRad = envBB.get_bounding_radius();
+			cxVec envOrg = envBB.get_center();
+
+			int nwrk = 4;
+			cxWorkBrigade brigade;
+			brigade.init(nwrk);
+			int njob = nwrk;
+			cTestJob* pJobs = nxCore::obj_alloc<cTestJob>(njob);
+			if (pJobs) {
+				int stride = mapH / njob;
+				for (int i = 0; i < njob; ++i) {
+					pJobs[i].mMapInfo.mWidth = mapW;
+					pJobs[i].mMapInfo.mHeight = mapH;
+					pJobs[i].mMapInfo.mOrg = i * stride;
+					pJobs[i].mMapInfo.mNum = stride;
+					pJobs[i].mEnvOrg = envOrg;
+					pJobs[i].mEnvRad = envRad;
+					pJobs[i].mpGeo = pEnvGeo;
+					pJobs[i].mpMap = pMap;
+				}
+				cxJobQueue que;
+				que.alloc(njob);
+				for (int i = 0; i < njob; ++i) {
+					que.put(&pJobs[i]);
+				}
+
+				int64_t ft0 = nxCore::get_timestamp();
+				que.exec(&brigade);
+				que.clear();
+				int64_t ft1 = nxCore::get_timestamp();
+				double freq = nxCore::get_perf_freq();
+				double dt = (ft1 - ft0) / freq;
+				double dtms = dt * 1000.0f;
+				::printf("Envmap creation took %f sec. (%f ms)\n", dt, dtms);
+
+				nxCore::obj_free(pJobs, njob);
+
+				const char* pEnvMapOutPath = "../data/env_map.dds";
+				::printf("Saving envmap to \"%s\"\n", pEnvMapOutPath);
+				nxCore::bin_save(pEnvMapOutPath, pPolarDDS, ddsSize);
+			}
+		}
+	}
+	return pPolarDDS;
+}
+
+static void sh_env_reconstruct(const sEnvCoefs& envSH, int w, int h, float* pWgt) {
+	int order = envSH.mOrder;
+	float* pN = nxDataUtil::alloc_sh_coefs_f32(order);
+	float* pR = nxDataUtil::alloc_sh_coefs_f32(order);
+	float* pG = nxDataUtil::alloc_sh_coefs_f32(order);
+	float* pB = nxDataUtil::alloc_sh_coefs_f32(order);
+	uint32_t ddsSize = 0;
+	sxDDSHead* pDDS = nxTexture::alloc_dds128(w, h, &ddsSize);
+	cxColor* pClr = reinterpret_cast<cxColor*>(pDDS + 1);
+	if (pClr && pN && pR && pG && pB) {
+		nxSH::apply_weights(pR, order, envSH.mpR, pWgt);
+		nxSH::apply_weights(pG, order, envSH.mpG, pWgt);
+		nxSH::apply_weights(pB, order, envSH.mpB, pWgt);
+		::printf("Reconstructing @ %dx%d.\n", w, h);
+		int64_t ft0 = nxCore::get_timestamp();
+		for (int y = 0; y < h; ++y) {
+			float v = 1.0f - (y + 0.5f) / h;
+			for (int x = 0; x < w; ++x) {
+				float u = (x + 0.5f) / w;
+				cxVec nrm = nxVec::from_polar_uv(u, v);
+				nxSH::eval(order, pN, nrm.x, nrm.y, nrm.z);
+				float r = nxSH::dot(order, pN, pR);
+				float g = nxSH::dot(order, pN, pG);
+				float b = nxSH::dot(order, pN, pB);
+				int idx = y*w + x;
+				pClr[idx].set(r, g, b);
+			}
+		}
+		int64_t ft1 = nxCore::get_timestamp();
+		double freq = nxCore::get_perf_freq();
+		double dt = (ft1 - ft0) / freq;
+		double dtms = dt * 1000.0f;
+		::printf("Elapsed %f ms.\n", dtms);
+		nxCore::bin_save("../data/env_reconstructed.dds", pDDS, ddsSize);
+		nxCore::mem_free(pN);
+		nxCore::mem_free(pR);
+		nxCore::mem_free(pG);
+		nxCore::mem_free(pB);
+		nxCore::mem_free(pDDS);
+	}
+}
+
 
 void sh_perf_test() {
 	const char* envPath = "../data/env.xgeo";
@@ -205,37 +365,17 @@ void sh_perf_test() {
 		return;
 	}
 	sxGeometryData* pEnvGeo = pEnvData->as<sxGeometryData>();
-
 	int mapW = 256;
 	int mapH = 128;
-	uint32_t ddsSize = 0;
-	sxDDSHead* pPolarDDS = nxTexture::alloc_dds128(mapW, mapH, &ddsSize);
-	cxColor* pMap = reinterpret_cast<cxColor*>(pPolarDDS + 1);
-	cxAABB envBB = pEnvGeo->mBBox;
-	float envRad = envBB.get_bounding_radius();
-	int64_t ft0 = nxCore::get_timestamp();
-	for (int y = 0; y < mapH; ++y) {
-		float v = 1.0f - (y + 0.5f) / mapH;
-		for (int x = 0; x < mapW; ++x) {
-			float u = (x + 0.5f) / mapW;
-			int idx = y*mapW + x;
-			cxColor clr = sample_env_color(pEnvGeo, u, v, envRad);
-			pMap[idx] = clr;
-		}
-	}
-	int64_t ft1 = nxCore::get_timestamp();
-	double freq = nxCore::get_perf_freq();
-	double dt = (ft1 - ft0) / freq;
-	double dtms = dt * 1000.0f;
-	::printf("Envmap creation took %f sec. (%f ms)\n", dt, dtms);
-
-	const char* pEnvMapOutPath = "../data/env_map.dds";
-	::printf("Saving envmap to \"%s\"\n", pEnvMapOutPath);
-	nxCore::bin_save(pEnvMapOutPath, pPolarDDS, ddsSize);
+	sxDDSHead* pPolarDDS = make_env_map_mt(pEnvGeo, mapW, mapH);
 
 	nxData::unload(pEnvData);
 
-	int order = ::atoi("10");
+	if (!pPolarDDS) return;
+
+	cxColor* pMap = reinterpret_cast<cxColor*>(pPolarDDS + 1);
+
+	int order = ::atoi("6");
 	sEnvCoefs envSH(order);
 	::printf("Testing order %d projection @ %dx%d.\n", order, mapW, mapH);
 	envSH.proj_env_polar(mapW, mapH, pMap);
@@ -250,12 +390,18 @@ void sh_perf_test() {
 		nxCore::mem_free(pPolarDDS);
 		return;
 	}
+
+	float* pWgt = nxCore::obj_alloc<float>(order);
+	float s = 8.0f;
+	nxSH::calc_weights(pWgt, order, s);
+	sh_env_reconstruct(envSH, mapW, mapH, pWgt);
+
 	sxGeometryData* pTgtGeo = pTgtData->as<sxGeometryData>();
-	cxColor* pTgtClr = sh_env_apply(*pTgtGeo, envSH);
+	cxColor* pTgtClr = sh_env_apply(*pTgtGeo, envSH, pWgt);
 	if (pTgtClr) {
 		int npnt = pTgtGeo->get_pnt_num();
 		FILE* pOut = nullptr;
-		const char* pOutGeoPath = "../data/_out.geo";
+		const char* pOutGeoPath = "../hou/_out.geo";
 		::printf("Saving geometry to \"%s\"\n", pOutGeoPath);
 		::fopen_s(&pOut, pOutGeoPath, "w");
 		if (pOut) {
@@ -267,7 +413,6 @@ void sh_perf_test() {
 			for (int i = 0; i < npnt; ++i) {
 				cxVec pos = pTgtGeo->get_pnt(i);
 				cxColor clr = pTgtClr[i];
-				clr.scl_rgb(0.15f);
 				::fprintf(pOut, "%.10f %.10f %.10f 1 (%.10f %.10f %.10f)\n", pos.x, pos.y, pos.z, clr.r, clr.g, clr.b);
 			}
 			::fprintf(pOut, "Run %d Poly\n", npol);
@@ -293,13 +438,12 @@ void sh_perf_test() {
 int main() {
 	nxCore::set_exe_cwd();
 
-	DWORD_PTR mask;
-	HANDLE hThr = ::GetCurrentThread();
-	mask = ::SetThreadAffinityMask(hThr, 1);
+	//HANDLE hThr = ::GetCurrentThread();
+	//DWORD_PTR mask = ::SetThreadAffinityMask(hThr, 1);
 
 	sh_perf_test();
 
-	::SetThreadAffinityMask(hThr, mask);
+	//::SetThreadAffinityMask(hThr, mask);
 
 	return 0;
 }
