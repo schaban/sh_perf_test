@@ -2,7 +2,7 @@
 #include "xcalc.hpp"
 #include "xdata.hpp"
 
-static cxVec eval_pol_color(const sxGeometryData::Polygon& pol, const cxVec& pos, const sxGeometryData::QuadInfo& quadInfo) {
+static cxVec eval_pol_color(const sxGeometryData::Polygon& pol, const cxVec& pos, const sxGeometryData::QuadInfo& quadInfo, int clrAttrIdx) {
 	int i;
 	cxVec vtx[3];
 	cxVec clr[3];
@@ -18,9 +18,21 @@ static cxVec eval_pol_color(const sxGeometryData::Polygon& pol, const cxVec& pos
 	} else {
 		return cxVec(1.0f, 0.0f, 0.0f);
 	}
+	const sxGeometryData* pGeo = pol.get_geo();
+	sxGeometryData::AttrInfo* pClrInfo = pGeo->get_attr_info(clrAttrIdx, sxGeometryData::eAttrClass::POINT);
 	for (i = 0; i < 3; ++i) {
-		vtx[i] = pol.get_geo()->get_pnt(pntIdx[i]);
-		clr[i] = pol.get_geo()->get_pnt_color(pntIdx[i]).mRGBA;
+		vtx[i] = pGeo->get_pnt(pntIdx[i]);
+		if (0) {
+			clr[i] = pGeo->get_pnt_color(pntIdx[i]).mRGBA;
+		} else {
+			// const float* pClr = &reinterpret_cast<const float*>(XD_INCR_PTR(pGeo, pClrInfo->mDataOffs))[pntIdx[i] * 3];
+			const float* pClr = pGeo->get_attr_data_f(clrAttrIdx, sxGeometryData::eAttrClass::POINT, pntIdx[i], 3);
+			if (pClr) {
+				clr[i].from_mem(pClr);
+			} else {
+				clr[i].fill(0.0f);
+			}
+		}
 	}
 	cxVec uvw = nxGeom::barycentric(pos, vtx[0], vtx[1], vtx[2]);
 	float u = uvw.x;
@@ -53,11 +65,11 @@ public:
 
 	bool get_hit_flg() const { return mHitFlg; }
 
-	cxColor get_color() const {
+	cxColor get_color(int clrAttrIdx) const {
 		cxColor clr(0.0f);
 		if (mHitFlg && mpGeo && mpGeo->ck_pol_idx(mPolId)) {
 			sxGeometryData::Polygon pol = mpGeo->get_pol(mPolId);
-			cxVec c = eval_pol_color(pol, mHitPos, mQuadInfo);
+			cxVec c = eval_pol_color(pol, mHitPos, mQuadInfo, clrAttrIdx);
 			clr.set(c.x, c.y, c.z);
 		}
 		return clr;
@@ -78,7 +90,7 @@ public:
 	}
 };
 
-cxColor sample_env_color(sxGeometryData* pEnvGeo, float u, float v, const cxVec& org, float dist) {
+cxColor sample_env_color(sxGeometryData* pEnvGeo, float u, float v, const cxVec& org, float dist, int clrAttrIdx) {
 	cxColor clr(0.0f);
 	cxVec dir = nxVec::from_polar_uv(u, v);
 	dir.scl(dist);
@@ -88,7 +100,7 @@ cxColor sample_env_color(sxGeometryData* pEnvGeo, float u, float v, const cxVec&
 	fn.set_ray(ray);
 	pEnvGeo->hit_query(ray, fn);
 	if (fn.get_hit_flg()) {
-		clr = fn.get_color();
+		clr = fn.get_color(clrAttrIdx);
 	} else {
 		clr.a = 0.0f;
 	}
@@ -193,6 +205,11 @@ static cxColor* sh_env_apply(const sxGeometryData& objGeo, const sEnvCoefs& envS
 sxDDSHead* make_env_map(sxGeometryData* pEnvGeo, int mapW, int mapH) {
 	sxDDSHead* pPolarDDS = nullptr;
 	if (pEnvGeo) {
+		int clrAttrIdx = pEnvGeo->find_pnt_attr("Cd");
+		if (clrAttrIdx < 0) {
+			::printf("Env geo has no colors, aborting.\n");
+			return nullptr;
+		}
 		::printf("Tracing environment geometry: %d polys.\n", pEnvGeo->get_pol_num());
 		uint32_t ddsSize = 0;
 		pPolarDDS = nxTexture::alloc_dds128(mapW, mapH, &ddsSize);
@@ -207,7 +224,7 @@ sxDDSHead* make_env_map(sxGeometryData* pEnvGeo, int mapW, int mapH) {
 				for (int x = 0; x < mapW; ++x) {
 					float u = (x + 0.5f) / mapW;
 					int idx = y*mapW + x;
-					cxColor clr = sample_env_color(pEnvGeo, u, v, envOrg, envRad);
+					cxColor clr = sample_env_color(pEnvGeo, u, v, envOrg, envRad, clrAttrIdx);
 					pMap[idx] = clr;
 				}
 			}
@@ -225,7 +242,7 @@ sxDDSHead* make_env_map(sxGeometryData* pEnvGeo, int mapW, int mapH) {
 	return pPolarDDS;
 }
 
-class cTestJob : public cxJob {
+class cEnvTraceJob : public cxJob {
 public:
 	struct {
 		int mOrg;
@@ -239,18 +256,20 @@ public:
 	float mEnvRad;
 
 	void exec(const Context& ctx) {
+		cxColor* pMap = mpMap;
+		sxGeometryData* pEnvGeo = mpGeo;
+		int clrAttrIdx = pEnvGeo->find_pnt_attr("Cd");
+		if (clrAttrIdx < 0) return;
 		int mapW = mMapInfo.mWidth;
 		int mapH = mMapInfo.mHeight;
 		int y0 = mMapInfo.mOrg;
 		int y1 = y0 + mMapInfo.mNum;
-		sxGeometryData* pEnvGeo = mpGeo;
-		cxColor* pMap = mpMap;
 		for (int y = y0; y < y1; ++y) {
 			float v = 1.0f - (y + 0.5f) / mapH;
 			for (int x = 0; x < mapW; ++x) {
 				float u = (x + 0.5f) / mapW;
 				int idx = y*mapW + x;
-				cxColor clr = sample_env_color(pEnvGeo, u, v, mEnvOrg, mEnvRad);
+				cxColor clr = sample_env_color(pEnvGeo, u, v, mEnvOrg, mEnvRad, clrAttrIdx);
 				pMap[idx] = clr;
 			}
 		}
@@ -273,7 +292,7 @@ sxDDSHead* make_env_map_mt(sxGeometryData* pEnvGeo, int mapW, int mapH) {
 			cxWorkBrigade brigade;
 			brigade.init(nwrk);
 			int njob = nwrk;
-			cTestJob* pJobs = nxCore::obj_alloc<cTestJob>(njob);
+			cEnvTraceJob* pJobs = nxCore::obj_alloc<cEnvTraceJob>(njob);
 			if (pJobs) {
 				int stride = mapH / njob;
 				for (int i = 0; i < njob; ++i) {
@@ -294,8 +313,8 @@ sxDDSHead* make_env_map_mt(sxGeometryData* pEnvGeo, int mapW, int mapH) {
 
 				int64_t ft0 = nxCore::get_timestamp();
 				que.exec(&brigade);
-				que.clear();
 				int64_t ft1 = nxCore::get_timestamp();
+				que.clear();
 				double freq = nxCore::get_perf_freq();
 				double dt = (ft1 - ft0) / freq;
 				double dtms = dt * 1000.0f;

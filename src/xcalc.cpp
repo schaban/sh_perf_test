@@ -1619,6 +1619,12 @@ static tsxEvalSH<70> s_SH70f;
 static tsxEvalSH<80> s_SH80f;
 static tsxEvalSH<90> s_SH90f;
 static tsxEvalSH<100> s_SH100f;
+static tsxEvalSH<110> s_SH110f;
+static tsxEvalSH<120> s_SH120f;
+static tsxEvalSH<130> s_SH130f;
+static tsxEvalSH<140> s_SH140f;
+static tsxEvalSH<150> s_SH150f;
+static tsxEvalSH<151> s_SH151f;
 
 #if XD_SHEVAL_F64
 static tsxEvalSH<2, double> s_SH2d;
@@ -1661,6 +1667,12 @@ _XD_SHEVAL_FUNC(70)
 _XD_SHEVAL_FUNC(80)
 _XD_SHEVAL_FUNC(90)
 _XD_SHEVAL_FUNC(100)
+_XD_SHEVAL_FUNC(110)
+_XD_SHEVAL_FUNC(120)
+_XD_SHEVAL_FUNC(130)
+_XD_SHEVAL_FUNC(140)
+_XD_SHEVAL_FUNC(150)
+_XD_SHEVAL_FUNC(151)
 
 #define _XD_SHEVAL_CASE(_ord_) case _ord_: eval##_ord_(pCoef, x, y, z); break;
 
@@ -1693,7 +1705,56 @@ void eval(int order, float* pCoef, float x, float y, float z) {
 		_XD_SHEVAL_CASE(80)
 		_XD_SHEVAL_CASE(90)
 		_XD_SHEVAL_CASE(100)
+		_XD_SHEVAL_CASE(110)
+		_XD_SHEVAL_CASE(120)
+		_XD_SHEVAL_CASE(130)
+		_XD_SHEVAL_CASE(140)
+		_XD_SHEVAL_CASE(150)
+		_XD_SHEVAL_CASE(151)
 	}
+}
+
+#undef _XD_SHEVAL_CASE
+#define _XD_SHEVAL_CASE(_ord_) case _ord_: pConsts = s_SH##_ord_##f.mConsts; break;
+
+float* get_consts_f32(int order) {
+	float* pConsts = nullptr;
+	switch (order) {
+		_XD_SHEVAL_CASE(2)
+		_XD_SHEVAL_CASE(3)
+		_XD_SHEVAL_CASE(4)
+		_XD_SHEVAL_CASE(5)
+		_XD_SHEVAL_CASE(6)
+		_XD_SHEVAL_CASE(7)
+		_XD_SHEVAL_CASE(8)
+		_XD_SHEVAL_CASE(9)
+		_XD_SHEVAL_CASE(10)
+		_XD_SHEVAL_CASE(11)
+		_XD_SHEVAL_CASE(12)
+		_XD_SHEVAL_CASE(13)
+		_XD_SHEVAL_CASE(14)
+		_XD_SHEVAL_CASE(15)
+		_XD_SHEVAL_CASE(16)
+		_XD_SHEVAL_CASE(17)
+		_XD_SHEVAL_CASE(18)
+		_XD_SHEVAL_CASE(19)
+		_XD_SHEVAL_CASE(20)
+		_XD_SHEVAL_CASE(30)
+		_XD_SHEVAL_CASE(40)
+		_XD_SHEVAL_CASE(50)
+		_XD_SHEVAL_CASE(60)
+		_XD_SHEVAL_CASE(70)
+		_XD_SHEVAL_CASE(80)
+		_XD_SHEVAL_CASE(90)
+		_XD_SHEVAL_CASE(100)
+		_XD_SHEVAL_CASE(110)
+		_XD_SHEVAL_CASE(120)
+		_XD_SHEVAL_CASE(130)
+		_XD_SHEVAL_CASE(140)
+		_XD_SHEVAL_CASE(150)
+		_XD_SHEVAL_CASE(151)
+	}
+	return pConsts;
 }
 
 #if XD_SHEVAL_F64
@@ -1762,6 +1823,18 @@ void project_polar_map(int order, float* pCoefR, float* pCoefG, float* pCoefB, c
 		pCoefR[i] *= s;
 		pCoefG[i] *= s;
 		pCoefB[i] *= s;
+	}
+}
+
+void get_irrad_weights(float* pWgt, int order, float scl) {
+	static float w[] = { 1.0f, 2.094395f / XD_PI, 0.785398f / XD_PI };
+	if (!pWgt) return;
+	for (int i = 0; i < order; ++i) {
+		if (i < 3) {
+			pWgt[i] = w[i] * scl;
+		} else {
+			pWgt[i] = 0.0f;
+		}
 	}
 }
 

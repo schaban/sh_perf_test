@@ -1021,7 +1021,7 @@ void sxGeometryData::hit_query(const cxLineSeg& seg, HitFunc& fun) const {
 		wk.mStopFlg = false;
 		BVH_hit_sub(wk, 0);
 	} else {
-		return hit_query_nobvh(seg, fun);
+		hit_query_nobvh(seg, fun);
 	}
 }
 
@@ -1066,8 +1066,38 @@ void sxGeometryData::range_query(const cxAABB& box, RangeFunc& fun) const {
 		wk.mStopFlg = false;
 		BVH_range_sub(wk, 0);
 	} else {
-		return range_query_nobvh(box, fun);
+		range_query_nobvh(box, fun);
 	}
+}
+
+cxAABB sxGeometryData::calc_world_bbox(cxMtx* pMtxW, int* pIdxMap) const {
+	cxAABB bbox = mBBox;
+	if (pMtxW) {
+		if (has_skin()) {
+			cxSphere* pSph = get_skin_sph_top();
+			if (pSph) {
+				int n = mSkinNodeNum;
+				for (int i = 0; i < n; ++i) {
+					int idx = i;
+					if (pIdxMap) {
+						idx = pIdxMap[i];
+					}
+					cxSphere sph = pSph[i];
+					cxVec spos = pMtxW[idx].calc_pnt(sph.get_center());
+					cxVec rvec(sph.get_radius());
+					cxAABB sbb(spos - rvec, spos + rvec);
+					if (i == 0) {
+						bbox = sbb;
+					} else {
+						bbox.merge(sbb);
+					}
+				}
+			}
+		} else {
+			bbox.transform(*pMtxW);
+		}
+	}
+	return bbox;
 }
 
 uint8_t* sxGeometryData::Polygon::get_vtx_lst() const {

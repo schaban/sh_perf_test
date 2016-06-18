@@ -20,6 +20,17 @@
 #include <new>
 
 #include <d3d11.h>
+#include <d3dcompiler.h>
+
+#ifdef D3D_COMPILER_VERSION
+#	if D3D_COMPILER_VERSION < 47
+#		define XD_D3D_HAS_LINKER 0
+#	else
+#		define XD_D3D_HAS_LINKER 1
+#	endif
+#else
+#	define XD_D3D_HAS_LINKER 0
+#endif
 
 #if defined(_MSC_VER)
 #	pragma intrinsic(_BitScanForward)
@@ -235,6 +246,27 @@ struct sxGfxDevice {
 	}
 
 	IDXGISwapChain* create_swap_chain(DXGI_SWAP_CHAIN_DESC& desc) const;
+	bool is_dx11_level() const;
+};
+
+struct sxHLSLCompilerIfc {
+	HMODULE mHandle;
+	pD3DCompile mpD3DCompile;
+	HRESULT(WINAPI * mpD3DReflect)(LPCVOID pCode, SIZE_T codeSize, REFIID refIfc, void** ppReflector);
+	pD3DDisassemble mpD3DDisassemble;
+#if XD_D3D_HAS_LINKER
+	HRESULT(WINAPI * mpD3DCreateLinker)(ID3D11Linker** ppLinker);
+	HRESULT(WINAPI * mpD3DLoadModule)(LPCVOID pSrcData, SIZE_T dataSize, ID3D11Module** ppModule);
+	HRESULT(WINAPI * mpD3DCreateFunctionLinkingGraph)(UINT uFlags, ID3D11FunctionLinkingGraph** ppFunctionLinkingGraph);
+	HRESULT(WINAPI * mpD3DReflectLibrary)(LPCVOID pSrcData, SIZE_T dataSize, REFIID refIfx, void** ppReflector);
+
+	bool has_linker() const { return mpD3DCreateLinker != nullptr; }
+#else
+	bool has_linker() const { return false; }
+#endif
+
+	bool is_loaded() const { return mHandle != nullptr; }
+	bool reflect(const void* pCode, size_t codeSize, ID3D11ShaderReflection** ppReflector);
 };
 
 namespace nxCore {
@@ -347,6 +379,8 @@ uint32_t fetch_bits32_loop(uint8_t* pTop, uint32_t org, uint32_t len);
 
 sxGfxDevice create_def_gfx_device();
 sxGfxDevice create_gfx_device_sc(DXGI_SWAP_CHAIN_DESC& desc, IDXGISwapChain** ppSwapChain);
+sxHLSLCompilerIfc* get_hlsl_compiler();
+void free_hlsl_compiler();
 
 int get_display_freq();
 

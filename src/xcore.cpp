@@ -306,6 +306,53 @@ sxGfxDevice create_gfx_device_sc(DXGI_SWAP_CHAIN_DESC& desc, IDXGISwapChain** pp
 	return dev;
 }
 
+static sxHLSLCompilerIfc* s_pCompilerIfc = nullptr;
+
+#define _XD_GET_D3DCOMPILER_PROC(_name) *(FARPROC*)&s_pCompilerIfc->mp##_name = ::GetProcAddress(hCompiler, #_name)
+
+sxHLSLCompilerIfc* get_hlsl_compiler() {
+	if (!s_pCompilerIfc) {
+		s_pCompilerIfc = reinterpret_cast<sxHLSLCompilerIfc*>(mem_alloc(sizeof(sxHLSLCompilerIfc)));
+		if (s_pCompilerIfc) {
+			::ZeroMemory(s_pCompilerIfc, sizeof(sxHLSLCompilerIfc));
+			HMODULE hCompiler = nullptr;
+			static int compilerVer[] = { 47, 43, 42, 40 };
+			wchar_t compilerName[64];
+			for (int i = 0; i < XD_ARY_LEN(compilerVer); ++i) {
+				::swprintf_s(compilerName, XD_ARY_LEN(compilerName), L"D3DCompiler_%d.dll", compilerVer[i]);
+				hCompiler = ::LoadLibraryW(compilerName);
+				if (hCompiler) {
+					break;
+				}
+			}
+			if (hCompiler) {
+				s_pCompilerIfc->mHandle = hCompiler;
+				_XD_GET_D3DCOMPILER_PROC(D3DCompile);
+				_XD_GET_D3DCOMPILER_PROC(D3DReflect);
+				_XD_GET_D3DCOMPILER_PROC(D3DDisassemble);
+
+#if XD_D3D_HAS_LINKER
+				_XD_GET_D3DCOMPILER_PROC(D3DCreateLinker);
+				_XD_GET_D3DCOMPILER_PROC(D3DLoadModule);
+				_XD_GET_D3DCOMPILER_PROC(D3DCreateFunctionLinkingGraph);
+				_XD_GET_D3DCOMPILER_PROC(D3DReflectLibrary);
+#endif
+			}
+		}
+	}
+	return s_pCompilerIfc;
+}
+
+void free_hlsl_compiler() {
+	if (s_pCompilerIfc) {
+		if (s_pCompilerIfc->is_loaded()) {
+			::FreeLibrary(s_pCompilerIfc->mHandle);
+		}
+		mem_free(s_pCompilerIfc);
+		s_pCompilerIfc = nullptr;
+	}
+}
+
 int get_display_freq() {
 	int freq = 60;
 	DEVMODE devmode;
@@ -377,6 +424,29 @@ IDXGISwapChain* sxGfxDevice::create_swap_chain(DXGI_SWAP_CHAIN_DESC& desc) const
 		}
 	}
 	return pSwp;
+}
+
+bool sxGfxDevice::is_dx11_level() const {
+	bool res = false;
+	if (is_valid()) {
+		res = mpDev->GetFeatureLevel() == D3D_FEATURE_LEVEL_11_0;
+	}
+	return res;
+}
+
+
+bool sxHLSLCompilerIfc::reflect(const void* pCode, size_t codeSize, ID3D11ShaderReflection** ppReflector) {
+	bool res = false;
+	if (is_loaded() && mpD3DReflect && pCode && ppReflector) {
+		static GUID guidRefl1 = { 0x0a233719, 0x3960, 0x4578, 0x9d, 0x7c, 0x20, 0x3b, 0x8b, 0x1d, 0x9c, 0xc1 };
+		static GUID guidRefl2 = { 0x8d536ca1, 0x0cca, 0x4956, 0xa8, 0x37, 0x78, 0x69, 0x63, 0x75, 0x55, 0x84 };
+		HRESULT hres = mpD3DReflect(pCode, codeSize, guidRefl1, (void**)ppReflector);
+		if (FAILED(hres)) {
+			hres = mpD3DReflect(pCode, codeSize, guidRefl2, (void**)ppReflector);
+		}
+		res = SUCCEEDED(hres);
+	}
+	return res;
 }
 
 

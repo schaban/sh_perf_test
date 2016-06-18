@@ -1073,6 +1073,7 @@ _XD_SHEVAL_FUNC(9)
 _XD_SHEVAL_FUNC(10)
 
 void eval(int order, float* pCoef, float x, float y, float z);
+float* get_consts_f32(int order);
 
 #if XD_SHEVAL_F64
 #undef _XD_SHEVAL_FUNC
@@ -1091,6 +1092,7 @@ void eval(int order, double* pCoef, double x, double y, double z);
 #endif
 
 void project_polar_map(int order, float* pCoefR, float* pCoefG, float* pCoefB, cxColor* pMap, int w, int h, float* pTmp = nullptr);
+void get_irrad_weights(float* pWgt, int order, float scl = 1.0f);
 void calc_weights(float* pWgt, int order, float s, float scl = 1.0f);
 void apply_weights(float* pDst, int order, const float* pSrc, const float* pWgt);
 float dot(int order, float* pA, float* pB);
@@ -1113,7 +1115,4 @@ struct sxSHIdx {
 
 	double calc_K() const { return nxSH::calc_K(l, m); }
 };
-
-
-
 
