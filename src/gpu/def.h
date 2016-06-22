@@ -1,0 +1,1 @@
+#define D_GPU_THREADS_NUM 256
