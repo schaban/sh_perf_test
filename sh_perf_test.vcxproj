@@ -163,12 +163,14 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\sh_gpu.cpp" />
     <ClCompile Include="src\sh_perf_test.cpp" />
     <ClCompile Include="src\xcalc.cpp" />
     <ClCompile Include="src\xcore.cpp" />
     <ClCompile Include="src\xdata.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="src\sh_gpu.hpp" />
     <ClInclude Include="src\xcalc.hpp" />
     <ClInclude Include="src\xcore.hpp" />
     <ClInclude Include="src\xdata.hpp" />

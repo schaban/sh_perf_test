@@ -2,6 +2,10 @@
 #include "xcalc.hpp"
 #include "xdata.hpp"
 
+#include "sh_gpu.hpp"
+
+static sGPUCompute GPU;
+
 static cxVec eval_pol_color(const sxGeometryData::Polygon& pol, const cxVec& pos, const sxGeometryData::QuadInfo& quadInfo, int clrAttrIdx) {
 	int i;
 	cxVec vtx[3];
@@ -176,11 +180,11 @@ static cxColor* sh_env_apply(const sxGeometryData& objGeo, const sEnvCoefs& envS
 	float* pG = nxDataUtil::alloc_sh_coefs_f32(order);
 	float* pB = nxDataUtil::alloc_sh_coefs_f32(order);
 	if (pPntClr && pN && pR && pG && pB) {
-		::printf("Applying SH to target obj (%d vertices).\n", npnt);
+		::printf("[CPU] Applying SH%d to target obj (%d vertices).\n", order, npnt);
 		nxSH::apply_weights(pR, order, envSH.mpR, pWgt);
 		nxSH::apply_weights(pG, order, envSH.mpG, pWgt);
 		nxSH::apply_weights(pB, order, envSH.mpB, pWgt);
-		int64_t ft0 = nxCore::get_timestamp();
+		int64_t t0 = nxCore::get_timestamp();
 		for (int i = 0; i < npnt; ++i) {
 			cxVec nrm = objGeo.get_pnt_normal(i);
 			nxSH::eval(order, pN, nrm.x, nrm.y, nrm.z);
@@ -189,9 +193,9 @@ static cxColor* sh_env_apply(const sxGeometryData& objGeo, const sEnvCoefs& envS
 			float b = nxSH::dot(order, pN, pB);
 			pPntClr[i].set(r, g, b);
 		}
-		int64_t ft1 = nxCore::get_timestamp();
+		int64_t t1 = nxCore::get_timestamp();
 		double freq = nxCore::get_perf_freq();
-		double dt = (ft1 - ft0) / freq;
+		double dt = (t1 - t0) / freq;
 		double dtms = dt * 1000.0f;
 		::printf("Elapsed %f ms.\n", dtms);
 		nxCore::mem_free(pN);
@@ -199,6 +203,54 @@ static cxColor* sh_env_apply(const sxGeometryData& objGeo, const sEnvCoefs& envS
 		nxCore::mem_free(pG);
 		nxCore::mem_free(pB);
 	}
+	return pPntClr;
+}
+
+static cxColor* sh_env_apply_gpu(const sxGeometryData& objGeo, const sEnvCoefs& envSH, float* pWgt) {
+	if (!GPU.is_valid()) return nullptr;
+	int npnt = objGeo.get_pnt_num();
+	cxColor* pPntClr = nxCore::obj_alloc<cxColor>(npnt);
+	if (!pPntClr) return nullptr;
+	int order = envSH.mOrder;
+	::printf("[GPU] Applying SH%d to target obj (%d vertices).\n", order, npnt);
+	GPU.set_sh(envSH.mpR, envSH.mpG, envSH.mpB, pWgt);
+	int nblk = (npnt / GPU.BLK_SIZE) + ((npnt % GPU.BLK_SIZE) != 0);
+	int pntId = 0;
+	GeomIn geomTmp[GPU.BLK_SIZE];
+	int64_t t0 = nxCore::get_timestamp();
+	for (int i = 0; i < nblk; ++i) {
+		int clrId = pntId;
+		int nelem = GPU.BLK_SIZE;
+		if (i == nblk - 1) {
+			if ((npnt % GPU.BLK_SIZE) != 0) {
+				nelem = npnt - pntId;
+			}
+		}
+		for (int j = 0; j < nelem; ++j) {
+			cxVec nrm = objGeo.get_pnt_normal(pntId);
+			nrm.to_mem(geomTmp[j].nrm);
+			++pntId;
+		}
+		GPU.update_geom_in(geomTmp);
+		GPU.exec_shapply(nelem);
+		GPU.copy_clr_out();
+		D3D11_MAPPED_SUBRESOURCE map;
+		HRESULT hres = GPU.mDev.mpCtx->Map(GPU.mpClrReadBuf, 0, D3D11_MAP_READ, 0, &map);
+		if (SUCCEEDED(hres)) {
+			xt_float3* pClrSrc = (xt_float3*)map.pData;
+			for (int j = 0; j < nelem; ++j) {
+				pPntClr[clrId].set(pClrSrc->x, pClrSrc->y, pClrSrc->z);
+				++pClrSrc;
+				++clrId;
+			}
+			GPU.mDev.mpCtx->Unmap(GPU.mpClrReadBuf, 0);
+		}
+	}
+	int64_t t1 = nxCore::get_timestamp();
+	double freq = nxCore::get_perf_freq();
+	double dt = (t1 - t0) / freq;
+	double dtms = dt * 1000.0f;
+	::printf("Elapsed %f ms.\n", dtms);
 	return pPntClr;
 }
 
@@ -374,6 +426,37 @@ static void sh_env_reconstruct(const sEnvCoefs& envSH, int w, int h, float* pWgt
 }
 
 
+void save_tgt_geo(const char* pOutGeoPath, sxGeometryData* pTgtGeo, cxColor* pTgtClr) {
+	int npnt = pTgtGeo->get_pnt_num();
+	FILE* pOut = nullptr;
+	::printf("Saving geometry to \"%s\"\n", pOutGeoPath);
+	::fopen_s(&pOut, pOutGeoPath, "w");
+	if (pOut) {
+		int npol = pTgtGeo->get_pol_num();
+		::fprintf(pOut, "PGEOMETRY V5\nNPoints %d NPrims %d\nNPointGroups 0 NPrimGroups 0\n", npnt, npol);
+		::fprintf(pOut, "NPointAttrib 1 NVertexAttrib 0 NPrimAttrib 0 NAttrib 0\n");
+		::fprintf(pOut, "PointAttrib\n");
+		::fprintf(pOut, "Cd 3 float 1 1 1\n");
+		for (int i = 0; i < npnt; ++i) {
+			cxVec pos = pTgtGeo->get_pnt(i);
+			cxColor clr = pTgtClr[i];
+			::fprintf(pOut, "%.10f %.10f %.10f 1 (%.10f %.10f %.10f)\n", pos.x, pos.y, pos.z, clr.r, clr.g, clr.b);
+		}
+		::fprintf(pOut, "Run %d Poly\n", npol);
+		for (int i = 0; i < npol; ++i) {
+			sxGeometryData::Polygon pol = pTgtGeo->get_pol(i);
+			int nvtx = pol.get_vtx_num();
+			::fprintf(pOut, " %d <", nvtx);
+			for (int j = 0; j < nvtx; ++j) {
+				::fprintf(pOut, " %d", pol.get_vtx_pnt_id(j));
+			}
+			::fprintf(pOut, "\n");
+		}
+		::fprintf(pOut, "beginExtra\nendExtra\n");
+		::fclose(pOut);
+	}
+}
+
 void sh_perf_test() {
 	const char* envPath = "../data/env.xgeo";
 	sxData* pEnvData = nxData::load(envPath);
@@ -394,7 +477,7 @@ void sh_perf_test() {
 
 	cxColor* pMap = reinterpret_cast<cxColor*>(pPolarDDS + 1);
 
-	int order = ::atoi("6");
+	int order = ::atoi("8");
 	sEnvCoefs envSH(order);
 	::printf("Testing order %d projection @ %dx%d.\n", order, mapW, mapH);
 	envSH.proj_env_polar(mapW, mapH, pMap);
@@ -416,38 +499,16 @@ void sh_perf_test() {
 	sh_env_reconstruct(envSH, mapW, mapH, pWgt);
 
 	sxGeometryData* pTgtGeo = pTgtData->as<sxGeometryData>();
+	int npnt = pTgtGeo->get_pnt_num();
 	cxColor* pTgtClr = sh_env_apply(*pTgtGeo, envSH, pWgt);
 	if (pTgtClr) {
-		int npnt = pTgtGeo->get_pnt_num();
-		FILE* pOut = nullptr;
-		const char* pOutGeoPath = "../hou/_out.geo";
-		::printf("Saving geometry to \"%s\"\n", pOutGeoPath);
-		::fopen_s(&pOut, pOutGeoPath, "w");
-		if (pOut) {
-			int npol = pTgtGeo->get_pol_num();
-			::fprintf(pOut, "PGEOMETRY V5\nNPoints %d NPrims %d\nNPointGroups 0 NPrimGroups 0\n", npnt, npol);
-			::fprintf(pOut, "NPointAttrib 1 NVertexAttrib 0 NPrimAttrib 0 NAttrib 0\n");
-			::fprintf(pOut, "PointAttrib\n");
-			::fprintf(pOut, "Cd 3 float 1 1 1\n");
-			for (int i = 0; i < npnt; ++i) {
-				cxVec pos = pTgtGeo->get_pnt(i);
-				cxColor clr = pTgtClr[i];
-				::fprintf(pOut, "%.10f %.10f %.10f 1 (%.10f %.10f %.10f)\n", pos.x, pos.y, pos.z, clr.r, clr.g, clr.b);
-			}
-			::fprintf(pOut, "Run %d Poly\n", npol);
-			for (int i = 0; i < npol; ++i) {
-				sxGeometryData::Polygon pol = pTgtGeo->get_pol(i);
-				int nvtx = pol.get_vtx_num();
-				::fprintf(pOut, " %d <", nvtx);
-				for (int j = 0; j < nvtx; ++j) {
-					::fprintf(pOut, " %d", pol.get_vtx_pnt_id(j));
-				}
-				::fprintf(pOut, "\n");
-			}
-			::fprintf(pOut, "beginExtra\nendExtra\n");
-			::fclose(pOut);
-		}
+		save_tgt_geo("../hou/_out.geo", pTgtGeo, pTgtClr);
 		nxCore::obj_free<cxColor>(pTgtClr, npnt);
+	}
+	cxColor* pTgtClrGPU = sh_env_apply_gpu(*pTgtGeo, envSH, pWgt);
+	if (pTgtClrGPU) {
+		save_tgt_geo("../hou/_out_gpu.geo", pTgtGeo, pTgtClrGPU);
+		nxCore::obj_free<cxColor>(pTgtClrGPU, npnt);
 	}
 
 	nxData::unload(pTgtData);
@@ -456,13 +517,10 @@ void sh_perf_test() {
 
 int main() {
 	nxCore::set_exe_cwd();
-
-	//HANDLE hThr = ::GetCurrentThread();
-	//DWORD_PTR mask = ::SetThreadAffinityMask(hThr, 1);
+	GPU.init();
 
 	sh_perf_test();
 
-	//::SetThreadAffinityMask(hThr, mask);
-
+	GPU.reset();
 	return 0;
 }
