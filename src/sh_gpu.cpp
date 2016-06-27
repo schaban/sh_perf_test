@@ -3,7 +3,6 @@
 #include "xdata.hpp"
 
 #include "sh_gpu.hpp"
-#include "gpu/def.h"
 #include "gpu/cs_shapply.h"
 
 void sGPUCompute::init() {
@@ -13,9 +12,18 @@ void sGPUCompute::init() {
 		mDev.relese();
 		return;
 	}
-	HRESULT hres = mDev.mpDev->CreateComputeShader(cs_shapply, sizeof(cs_shapply), nullptr, &mpSHApply);
+	HRESULT hres = mDev.mpDev->CreateClassLinkage(&mpLinkage);
 	if (FAILED(hres)) {
 		return;
+	}
+	hres = mDev.mpDev->CreateComputeShader(cs_shapply, sizeof(cs_shapply), mpLinkage, &mpSHApply);
+	if (FAILED(hres)) {
+		return;
+	}
+	for (int i = 2; i <= D_GPU_SH_MAX; ++i) {
+		char shInstName[128];
+		::sprintf_s(shInstName, sizeof(shInstName), "cSH%d", i);
+		mpLinkage->CreateClassInstance(shInstName, 0, 0, 0, 0, &mpSHInst[i]);
 	}
 	mpGeomIn = create_buffer(sizeof(GeomIn), BLK_SIZE);
 	mpClrOut = create_buffer(sizeof(ClrOut), BLK_SIZE);
@@ -63,15 +71,22 @@ void sGPUCompute::reset() {
 		mpSHApply->Release();
 		mpSHApply = nullptr;
 	}
+	if (mpLinkage) {
+		mpLinkage->Release();
+		mpLinkage = nullptr;
+	}
 	mDev.relese();
 }
 
-void sGPUCompute::set_sh(const float* pR, const float* pG, const float* pB, const float* pWgt) {
-	for (int i = 0; i < 8 * 8; ++i) {
-		mSH.sh8[i].set(pR[i], pG[i], pB[i], 0.0f);
+void sGPUCompute::set_sh(int order, const float* pR, const float* pG, const float* pB, const float* pWgt) {
+	if (order < 2) return;
+	if (order > D_GPU_SH_MAX) order = D_GPU_SH_MAX;
+	int ncoef = nxSH::calc_coefs_num(order);
+	for (int i = 0; i < ncoef; ++i) {
+		mSH.sh[i].set(pR[i], pG[i], pB[i], 0.0f);
 	}
-	for (int i = 0; i < 8; ++i) {
-		mSH.sh8[i].w = pWgt[i];
+	for (int i = 0; i < order; ++i) {
+		mSH.sh[i].w = pWgt[i];
 	}
 	if (mDev.is_valid() && mpSHCB) {
 		D3D11_MAPPED_SUBRESOURCE map;
@@ -172,11 +187,13 @@ void sGPUCompute::update_geom_in(const GeomIn* pSrc) {
 	mDev.mpCtx->UpdateSubresource(mpGeomIn, 0, nullptr, pSrc, 0, 0);
 }
 
-void sGPUCompute::exec_shapply(int wksize) {
+void sGPUCompute::exec_shapply(int order, int wksize) {
+	if (order < 2) return;
+	if (order > D_GPU_SH_MAX) order = D_GPU_SH_MAX;
 	mDev.mpCtx->CSSetShaderResources(0, 1, &mpGeomSRV);
 	mDev.mpCtx->CSSetUnorderedAccessViews(0, 1, &mpClrUAV, nullptr);
 	mDev.mpCtx->CSSetConstantBuffers(0, 1, &mpSHCB);
-	mDev.mpCtx->CSSetShader(mpSHApply, nullptr, 0);
+	mDev.mpCtx->CSSetShader(mpSHApply, &mpSHInst[order], 1);
 	int ngrp = (wksize / D_GPU_THREADS_NUM) + ((wksize % D_GPU_THREADS_NUM) != 0);
 	mDev.mpCtx->Dispatch(ngrp, 1, 1);
 }

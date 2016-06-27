@@ -213,7 +213,7 @@ static cxColor* sh_env_apply_gpu(const sxGeometryData& objGeo, const sEnvCoefs& 
 	if (!pPntClr) return nullptr;
 	int order = envSH.mOrder;
 	::printf("[GPU] Applying SH%d to target obj (%d vertices).\n", order, npnt);
-	GPU.set_sh(envSH.mpR, envSH.mpG, envSH.mpB, pWgt);
+	GPU.set_sh(order, envSH.mpR, envSH.mpG, envSH.mpB, pWgt);
 	int nblk = (npnt / GPU.BLK_SIZE) + ((npnt % GPU.BLK_SIZE) != 0);
 	int pntId = 0;
 	GeomIn geomTmp[GPU.BLK_SIZE];
@@ -232,7 +232,7 @@ static cxColor* sh_env_apply_gpu(const sxGeometryData& objGeo, const sEnvCoefs& 
 			++pntId;
 		}
 		GPU.update_geom_in(geomTmp);
-		GPU.exec_shapply(nelem);
+		GPU.exec_shapply(order, nelem);
 		GPU.copy_clr_out();
 		D3D11_MAPPED_SUBRESOURCE map;
 		HRESULT hres = GPU.mDev.mpCtx->Map(GPU.mpClrReadBuf, 0, D3D11_MAP_READ, 0, &map);
@@ -477,7 +477,7 @@ void sh_perf_test() {
 
 	cxColor* pMap = reinterpret_cast<cxColor*>(pPolarDDS + 1);
 
-	int order = ::atoi("8");
+	int order = ::atoi("19");
 	sEnvCoefs envSH(order);
 	::printf("Testing order %d projection @ %dx%d.\n", order, mapW, mapH);
 	envSH.proj_env_polar(mapW, mapH, pMap);
