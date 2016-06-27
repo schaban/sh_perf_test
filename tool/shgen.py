@@ -220,7 +220,7 @@ class Codegen:
 			
 			if m+1 < self.order:
 				l = m+1
-				lang.statement([ Var("prev1"), Op("="), self.consts[cidx], Op("*"), Var("z") ])
+				lang.statement([Var("prev1"), Op("="), self.consts[cidx], Op("*"), Var("z")])
 				cidx += 1
 				cfn(lang, l*l + l - m, [Var("prev1"), Op("*"), Var(s)])
 				cfn(lang, l*l + l + m, [Var("prev1"), Op("*"), Var(c)])
@@ -245,7 +245,7 @@ class Codegen:
 			maskCnt = 0
 			for l in xrange(m+4, self.order):
 				prevIdx = mask & 3
-				lang.statement([ Var("tmp"), Op("="), self.consts[cidx], Op("*"), Var("z") ])
+				lang.statement([Var("tmp"), Op("="), self.consts[cidx], Op("*"), Var("z")])
 				cidx += 1
 				lang.statement([ Var("prev"+str(prevIdx)), Op("="), Var("tmp"), Op("*"), Var("prev" + str((mask >> 2) & 3)) ])
 				lang.statement([ Var("tmp"), Op("="), self.consts[cidx], Op("*"),  Var("prev" + str((mask >> 4) & 3)) ])
@@ -380,6 +380,40 @@ class LangCpp(LangCBase):
 
 	def getFileExt(self): return ".cpp"
 
+class LangVEX(LangCBase):
+	def __init__(self):
+		LangCBase.__init__(self)
+		self.coefsName = "sh"
+		self.floatPostfix = ""
+
+	def prologue(self, order, isEval):
+		self.code += "function " + self.coefsType + "[] shEval" + str(order) + "(" + self.coefsType + " x, y, z) {" + EOL
+		LangCBase.locals(self)
+		self.code += "\t" + self.coefsType + " " + self.coefsName + "[];" + EOL
+		self.code += "\tresize(" + self.coefsName + ", " + str(shNumCoefs(order)) + ");" + EOL
+
+	def statement(self, expr):
+		self.code += "\t"
+		LangCBase.expr(self, expr)
+		self.code += ";" + EOL
+
+	def epilogue(self, isEval):
+		self.code += "\treturn " + self.coefsName + ";" + EOL
+		self.code += "}" + EOL
+
+	def getFileExt(self): return ".vex"
+
+class LangVEX3(LangVEX):
+	def __init__(self):
+		LangVEX.__init__(self)
+		self.coefsType = "vector"
+
+class LangVEX4(LangVEX):
+	def __init__(self):
+		LangVEX.__init__(self)
+		self.coefsType = "vector4"
+
+
 def genWgtSumHLSL(order, nelems = 2, elemType = "float3"):
 	if order < 2: return
 	ncoef = shNumCoefs(order)
@@ -440,12 +474,11 @@ def saveStr(path, s):
 	f.write(s)
 	f.close()
 
-
 def genHLSL():
 	outPath = exePath + "/../src/gpu/sheval.h"
 	f = open(outPath, "w")
 	if not f: return
-	maxOrder = 8
+	maxOrder = 19
 	f.write("// float" + EOL)
 	for order in xrange(2, maxOrder+1):
 		cg = Codegen(order)
