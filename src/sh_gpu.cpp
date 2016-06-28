@@ -71,6 +71,12 @@ void sGPUCompute::reset() {
 		mpSHApply->Release();
 		mpSHApply = nullptr;
 	}
+	for (int i = 2; i <= D_GPU_SH_MAX; ++i) {
+		if (mpSHInst[i]) {
+			mpSHInst[i]->Release();
+			mpSHInst[i] = nullptr;
+		}
+	}
 	if (mpLinkage) {
 		mpLinkage->Release();
 		mpLinkage = nullptr;
