@@ -780,6 +780,26 @@ float* sxGeometryData::get_attr_data_f(int attrIdx, eAttrClass cls, int itemIdx,
 	return pData;
 }
 
+float sxGeometryData::get_pnt_attr_val_f(int attrIdx, int pntIdx) const {
+	float res = 0.0f;
+	float* pData = get_attr_data_f(attrIdx, eAttrClass::POINT, pntIdx);
+	if (pData) {
+		res = *pData;
+	}
+	return res;
+}
+
+xt_float3 sxGeometryData::get_pnt_attr_val_f3(int attrIdx, int pntIdx) const {
+	xt_float3 res;
+	float* pData = get_attr_data_f(attrIdx, eAttrClass::POINT, pntIdx, 3);
+	if (pData) {
+		res.set(pData[0], pData[1], pData[2]);
+	} else {
+		res.fill(0.0f);
+	}
+	return res;
+}
+
 cxVec sxGeometryData::get_pnt_normal(int pntIdx) const {
 	cxVec nrm(0.0f, 1.0f, 0.0f);
 	int attrIdx = find_pnt_attr("N");
@@ -968,7 +988,8 @@ void sxGeometryData::hit_query_nobvh(const cxLineSeg& seg, HitFunc& fun) const {
 		Polygon pol = get_pol(i);
 		bool hitFlg = pol.intersect(seg, &hitPos, &hitNrm, &quadInfo);
 		if (hitFlg) {
-			bool contFlg = fun(pol, hitPos, hitNrm, quadInfo);
+			float hitDist = nxVec::dist(seg.get_pos0(), hitPos);
+			bool contFlg = fun(pol, hitPos, hitNrm, hitDist, quadInfo);
 			if (!contFlg) {
 				break;
 			}
@@ -990,7 +1011,7 @@ struct sxBVHWork {
 static void BVH_hit_sub(sxBVHWork& wk, int nodeId) {
 	if (wk.mStopFlg) return;
 	sxGeometryData::BVH::Node* pNode = wk.mpGeo->get_BVH_node(nodeId);
-	if (wk.mQryBBox.overlap(pNode->mBBox) && pNode->mBBox.seg_ck(wk.mQrySeg)) {
+	if (pNode->mBBox.overlap(wk.mQryBBox) && pNode->mBBox.seg_ck(wk.mQrySeg)) {
 		if (pNode->is_leaf()) {
 			cxVec hitPos;
 			cxVec hitNrm;
@@ -998,7 +1019,8 @@ static void BVH_hit_sub(sxBVHWork& wk, int nodeId) {
 			sxGeometryData::Polygon pol = wk.mpGeo->get_pol(pNode->get_pol_id());
 			bool hitFlg = pol.intersect(wk.mQrySeg, &hitPos, &hitNrm, &quadInfo);
 			if (hitFlg) {
-				bool contFlg = (*wk.mpHitFunc)(pol, hitPos, hitNrm, quadInfo);
+				float hitDist = nxVec::dist(wk.mQrySeg.get_pos0(), hitPos);
+				bool contFlg = (*wk.mpHitFunc)(pol, hitPos, hitNrm, hitDist, quadInfo);
 				if (!contFlg) {
 					wk.mStopFlg = true;
 				}
@@ -1734,7 +1756,7 @@ int sxKeyframesData::FCurve::get_fno(int idx) const {
 	return fno;
 }
 
-float sxKeyframesData::FCurve::eval(float frm) const {
+float sxKeyframesData::FCurve::eval(float frm, bool extrapolate) const {
 	float val = 0.0f;
 	int fno = (int)frm;
 	if (is_valid()) {
@@ -1760,7 +1782,11 @@ float sxKeyframesData::FCurve::eval(float frm) const {
 					val = pVals[lastIdx];
 				} else {
 					float t = frm - (float)fno;
-					val = nxCalc::lerp(pVals[lastIdx], pVals[0], t);
+					if (extrapolate) {
+						val = nxCalc::lerp(pVals[lastIdx], pVals[lastIdx] + pVals[0], t);
+					} else {
+						val = nxCalc::lerp(pVals[lastIdx], pVals[0], t);
+					}
 				}
 			} else if (mpKfr->ck_fno(fno)) {
 				float* pVals = reinterpret_cast<float*>(XD_INCR_PTR(mpKfr, pInfo->mValOffs));

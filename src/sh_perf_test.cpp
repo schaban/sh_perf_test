@@ -6,6 +6,8 @@
 
 static sGPUCompute GPU;
 
+static bool s_useYCgCo = false;
+
 static cxVec eval_pol_color(const sxGeometryData::Polygon& pol, const cxVec& pos, const sxGeometryData::QuadInfo& quadInfo, int clrAttrIdx) {
 	int i;
 	cxVec vtx[3];
@@ -79,8 +81,8 @@ public:
 		return clr;
 	}
 
-	virtual bool operator()(const sxGeometryData::Polygon& pol, const cxVec& hitPos, const cxVec& hitNrm, const sxGeometryData::QuadInfo& quadInfo) {
-		float dist = nxVec::dist(mRay.get_pos0(), hitPos);
+	virtual bool operator()(const sxGeometryData::Polygon& pol, const cxVec& hitPos, const cxVec& hitNrm, float hitDist, const sxGeometryData::QuadInfo& quadInfo) {
+		float dist = hitDist;
 		if (dist < mNearest) {
 			mpGeo = pol.get_geo();
 			mPolId = pol.get_id();
@@ -109,6 +111,16 @@ cxColor sample_env_color(sxGeometryData* pEnvGeo, float u, float v, const cxVec&
 		clr.a = 0.0f;
 	}
 	return clr;
+}
+
+void reduce_order(float* pSH, int order, int dstOrder) {
+	if (!pSH) return;
+	if (dstOrder >= order) return;
+	int nall = nxSH::calc_coefs_num(order);
+	int ndst = nxSH::calc_coefs_num(dstOrder);
+	for (int i = ndst; i < nall; ++i) {
+		pSH[i] = 0.0f;
+	}
 }
 
 struct sEnvCoefs {
@@ -397,6 +409,9 @@ static void sh_env_reconstruct(const sEnvCoefs& envSH, int w, int h, float* pWgt
 		nxSH::apply_weights(pG, order, envSH.mpG, pWgt);
 		nxSH::apply_weights(pB, order, envSH.mpB, pWgt);
 		::printf("Reconstructing @ %dx%d.\n", w, h);
+		if (s_useYCgCo) {
+			::printf("[YCgCo -> RGB]\n");
+		}
 		int64_t ft0 = nxCore::get_timestamp();
 		for (int y = 0; y < h; ++y) {
 			float v = 1.0f - (y + 0.5f) / h;
@@ -407,6 +422,12 @@ static void sh_env_reconstruct(const sEnvCoefs& envSH, int w, int h, float* pWgt
 				float r = nxSH::dot(order, pN, pR);
 				float g = nxSH::dot(order, pN, pG);
 				float b = nxSH::dot(order, pN, pB);
+				if (s_useYCgCo) {
+					XMVECTOR xrgb = nxColor::YCgCo_to_RGB(XMVectorSet(r, g, b, 0.0f));
+					r = XMVectorGetX(xrgb);
+					g = XMVectorGetY(xrgb);
+					b = XMVectorGetZ(xrgb);
+				}
 				int idx = y*w + x;
 				pClr[idx].set(r, g, b);
 			}
@@ -477,11 +498,27 @@ void sh_perf_test() {
 
 	cxColor* pMap = reinterpret_cast<cxColor*>(pPolarDDS + 1);
 
+	if (s_useYCgCo) {
+		if (s_useYCgCo) {
+			::printf("[RGB -> YCgCo]\n");
+		}
+		for (int i = 0; i < mapW*mapH; ++i) {
+			pMap[i].set_rgba(pMap[i].to_YCgCo());
+		}
+	}
+
 	int order = ::atoi("19");
 	sEnvCoefs envSH(order);
 	::printf("Testing order %d projection @ %dx%d.\n", order, mapW, mapH);
 	envSH.proj_env_polar(mapW, mapH, pMap);
 	::printf("Elapsed %f ms.\n", envSH.mDtMs);
+
+	if (s_useYCgCo) {
+		int chromOrder = (int)nxCalc::round(order / 1.6f);
+		::printf("[Chrominance reduction: %d -> %d]\n", order, chromOrder);
+		reduce_order(envSH.mpG, order, chromOrder);
+		reduce_order(envSH.mpB, order, chromOrder);
+	}
 
 	const char* tgtPath = "../data/tgt.xgeo";
 	sxData* pTgtData = nxData::load(tgtPath);
@@ -494,7 +531,7 @@ void sh_perf_test() {
 	}
 
 	float* pWgt = nxCore::obj_alloc<float>(order);
-	float s = 8.0f;
+	float s = 64.0f;
 	nxSH::calc_weights(pWgt, order, s);
 	sh_env_reconstruct(envSH, mapW, mapH, pWgt);
 

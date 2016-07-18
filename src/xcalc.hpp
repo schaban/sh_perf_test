@@ -730,6 +730,7 @@ public:
 	void set_g(float g) { mRGBA = XMVectorSetByIndex(mRGBA, g, 1); }
 	void set_b(float b) { mRGBA = XMVectorSetByIndex(mRGBA, b, 2); }
 	void set_a(float a) { mRGBA = XMVectorSetByIndex(mRGBA, a, 3); }
+	void set_rgba(XMVECTOR xrgba) { mRGBA = xrgba; }
 
 	float luma() const;
 	float luminance() const;
@@ -740,12 +741,31 @@ public:
 		b *= s;
 	}
 
+	void scl_rgb(float sr, float sg, float sb) {
+		r *= sr;
+		g *= sg;
+		b *= sb;
+	}
+
 	void make_linear();
 	void make_sRGB();
 
 	XMVECTOR to_HSV() const;
 	void from_HSV(XMVECTOR hsv);
+	XMVECTOR to_YCgCo() const;
+	void from_YCgCo(XMVECTOR ygo);
 };
+
+namespace nxColor {
+
+float luma(XMVECTOR xrgb);
+float luma_hd(XMVECTOR xrgb);
+float luminance(XMVECTOR xrgb);
+XMVECTOR RGB_to_YCgCo(XMVECTOR xrgb);
+XMVECTOR YCgCo_to_RGB(XMVECTOR xygo);
+
+} // nxColor
+
 
 
 class cxTrackball {
@@ -1095,7 +1115,8 @@ void project_polar_map(int order, float* pCoefR, float* pCoefG, float* pCoefB, c
 void get_irrad_weights(float* pWgt, int order, float scl = 1.0f);
 void calc_weights(float* pWgt, int order, float s, float scl = 1.0f);
 void apply_weights(float* pDst, int order, const float* pSrc, const float* pWgt);
-float dot(int order, float* pA, float* pB);
+float dot(int order, const float* pA, const float* pB);
+cxVec extract_dominant_dir(const float* pCoefR, const float* pCoefG, const float* pCoefB);
 
 } // nxSH
 
@@ -1116,3 +1137,46 @@ struct sxSHIdx {
 	double calc_K() const { return nxSH::calc_K(l, m); }
 };
 
+template<int ORDER, typename T = float> struct tsxSHCoefs {
+	T mData[ORDER < 1 ? 0 : ORDER*ORDER];
+
+	static int get_order() { return ORDER; }
+	static int get_coefs_num() { return nxSH::calc_coefs_num(ORDER); }
+
+	T get(int l, int m) const { return mData[nxSH::calc_ary_idx(l, m)]; }
+	void set(int l, int m, T val) { mData[nxSH::calc_ary_idx(l, m)] = val; }
+
+	void clear() {
+		int n = get_coefs_num();
+		for (int i = 0; i < n; ++i) {
+			mData[i] = 0.0f;
+		}
+	}
+
+	void eval(const cxVec& dir) {
+		T x = (T)dir.x;
+		T y = (T)dir.y;
+		T z = (T)dir.z;
+		nxSH::eval(ORDER, mData, x, y, z);
+	}
+
+	void scl(float s) {
+		int n = get_coefs_num();
+		for (int i = 0; i < n; ++i) {
+			mData[i] *= s;
+		}
+	}
+
+	template<typename SH_T> float dot(const SH_T& coefs) const {
+		int order = nxCalc::min(get_order(), coefs.get_order());
+		return nxSH::dot(order, mData, coefs.mData);
+	}
+
+	template<typename SH_T> void add(const SH_T& coefs) {
+		int order = nxCalc::min(get_order(), coefs.get_order());
+		int ncoef = nxSH::calc_coefs_num(order);
+		for (int i = 0; i < ncoef; ++i) {
+			mData[i] += coefs.mData[i];
+		}
+	}
+};

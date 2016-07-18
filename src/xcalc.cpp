@@ -685,16 +685,60 @@ void cxQuat::slerp(const cxQuat& q1, const cxQuat& q2, float t) {
 namespace nxColor {
 
 XMGLOBALCONST XMVECTORF32 g_luma601 = { 0.299f, 0.587f, 0.114f, 0.0f };
+XMGLOBALCONST XMVECTORF32 g_luma709 = { 0.2126f, 0.7152f, 0.0722f, 0.0f };
 XMGLOBALCONST XMVECTORF32 g_Y709 = { 0.212671f, 0.71516f, 0.072169f, 0.0f };
 
+float luma(XMVECTOR xrgb) { return nxVec::dot4(xrgb, nxColor::g_luma601); }
+float luma_hd(XMVECTOR xrgb) { return nxVec::dot4(xrgb, nxColor::g_luma709); }
+float luminance(XMVECTOR xrgb) { return nxVec::dot4(xrgb, nxColor::g_Y709); }
+
+XMVECTOR RGB_to_YCgCo(XMVECTOR xrgb) {
+#if 0
+	cxVec rgb(xrgb);
+	return XMVectorSet(
+		rgb.dot(cxVec(0.25f, 0.5f, 0.25f)),
+		rgb.dot(cxVec(-0.25f, 0.5f, -0.25f)),
+		rgb.dot(cxVec(0.5f, 0.0f, -0.5f)),
+		0.0f
+	);
+#else
+	XMVECTOR hc = xrgb * 0.5f;
+	float hr = XMVectorGetX(hc);
+	float hg = XMVectorGetY(hc);
+	float hb = XMVectorGetZ(hc);
+	float qr = hr * 0.5f;
+	float qb = hb * 0.5f;
+	return XMVectorSet(qr + hg + qb, -qr + hg - qb, hr - hb, 0.0f);
+#endif
 }
 
+XMVECTOR YCgCo_to_RGB(XMVECTOR xygo) {
+#if 0
+	cxVec ygo(xygo);
+	return XMVectorSet(
+		ygo.dot(cxVec(1.0f, -1.0f, 1.0f)),
+		ygo.dot(cxVec(1.0f, 1.0f, 0.0f)),
+		ygo.dot(cxVec(1.0f, -1.0f, -1.0f)),
+		1.0f
+	);
+#else
+	float y = XMVectorGetX(xygo);
+	float g = XMVectorGetY(xygo);
+	float o = XMVectorGetZ(xygo);
+	float t = y - g;
+	return XMVectorSet(t + o, y + g, t - o, 1.0f);
+#endif
+}
+
+} // nxColor
+
+
 float cxColor::luma() const {
-	return nxVec::dot4(mRGBA, nxColor::g_luma601);
+	return nxColor::luma(mRGBA);
 }
 
 float cxColor::luminance() const {
-	return nxVec::dot4(mRGBA, nxColor::g_Y709);
+	return nxColor::luminance(mRGBA);
 }
 
 XD_NOINLINE void cxColor::make_linear() {
@@ -711,6 +755,14 @@ XMVECTOR cxColor::to_HSV() const {
 
 void cxColor::from_HSV(XMVECTOR hsv) {
 	mRGBA = XMColorHSVToRGB(hsv);
+}
+
+XMVECTOR cxColor::to_YCgCo() const {
+	return nxColor::RGB_to_YCgCo(mRGBA);
+}
+
+void cxColor::from_YCgCo(XMVECTOR ygo) {
+	mRGBA = nxColor::YCgCo_to_RGB(ygo);
 }
 
 
@@ -1109,23 +1161,37 @@ bool cxAABB::seg_ck(const cxVec& p0, const cxVec& p1) const {
 	XMVECTOR t2 = (mMax.get_xv() - p0.get_xv()) * dv;
 	XMVECTOR vmin = XMVectorMin(t1, t2);
 	XMVECTOR vmax = XMVectorMax(t1, t2);
+	float tmin = 0.0f;
+	float tmax = len;
 
-	float tmin = nxCalc::max(0.0f, XMVectorGetX(vmin));
-	float tmax = nxCalc::min(len, XMVectorGetX(vmax));
-	if (tmin > tmax) {
-		return false;
+	if (dir.x != 0) {
+		tmin = nxCalc::max(tmin, XMVectorGetX(vmin));
+		tmax = nxCalc::min(tmax, XMVectorGetX(vmax));
+		if (tmin > tmax) {
+			return false;
+		}
+	} else {
+		if (p0.x < mMin.x || p0.x > mMax.x) return false;
 	}
 
-	tmin = nxCalc::max(tmin, XMVectorGetY(vmin));
-	tmax = nxCalc::min(tmax, XMVectorGetY(vmax));
-	if (tmin > tmax) {
-		return false;
+	if (dir.y != 0) {
+		tmin = nxCalc::max(tmin, XMVectorGetY(vmin));
+		tmax = nxCalc::min(tmax, XMVectorGetY(vmax));
+		if (tmin > tmax) {
+			return false;
+		}
+	} else {
+		if (p0.y < mMin.y || p0.y > mMax.y) return false;
 	}
 
-	tmin = nxCalc::max(tmin, XMVectorGetZ(vmin));
-	tmax = nxCalc::min(tmax, XMVectorGetZ(vmax));
-	if (tmin > tmax) {
-		return false;
+	if (dir.z != 0) {
+		tmin = nxCalc::max(tmin, XMVectorGetZ(vmin));
+		tmax = nxCalc::min(tmax, XMVectorGetZ(vmax));
+		if (tmin > tmax) {
+			return false;
+		}
+	} else {
+		if (p0.z < mMin.z || p0.z > mMax.z) return false;
 	}
 
 	if (tmax > len) return false;
@@ -1788,10 +1854,10 @@ void eval(int order, double* pCoef, double x, double y, double z) {
 void project_polar_map(int order, float* pCoefR, float* pCoefG, float* pCoefB, cxColor* pMap, int w, int h, float* pTmp) {
 	if (order < 2) return;
 	const int maxOrder = 10;
-	float tmpSH[maxOrder * maxOrder];
+	tsxSHCoefs<maxOrder> tmpSH;
 	if (!pTmp) {
 		if (order > maxOrder) return;
-		pTmp = tmpSH;
+		pTmp = tmpSH.mData;
 	}
 	int ncoef = calc_coefs_num(order);
 	size_t dataSize = ncoef * sizeof(float);
@@ -1856,13 +1922,25 @@ void apply_weights(float* pDst, int order, const float* pSrc, const float* pWgt)
 	}
 }
 
-float dot(int order, float* pA, float* pB) {
+float dot(int order, const float* pA, const float* pB) {
 	float d = 0.0f;
 	int n = calc_coefs_num(order);
 	for (int i = 0; i < n; ++i) {
 		d += pA[i] * pB[i];
 	}
 	return d;
+}
+
+cxVec extract_dominant_dir(const float* pCoefR, const float* pCoefG, const float* pCoefB) {
+	int idx = calc_ary_idx(1, 1);
+	float lx = cxColor(pCoefR[idx], pCoefG[idx], pCoefB[idx]).luminance();
+	idx = calc_ary_idx(1, -1);
+	float ly = cxColor(pCoefR[idx], pCoefG[idx], pCoefB[idx]).luminance();
+	idx = calc_ary_idx(1, 0);
+	float lz = cxColor(pCoefR[idx], pCoefG[idx], pCoefB[idx]).luminance();
+	cxVec dir(-lx, -ly, lz);
+	dir.normalize();
+	return dir;
 }
 
 } // nxSH

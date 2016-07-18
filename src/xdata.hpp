@@ -360,7 +360,7 @@ struct sxGeometryData : public sxData {
 	public:
 		HitFunc() {}
 		virtual ~HitFunc() {}
-		virtual bool operator()(const Polygon& pol, const cxVec& hitPos, const cxVec& hitNrm, const QuadInfo& quadInfo) { return false; }
+		virtual bool operator()(const Polygon& pol, const cxVec& hitPos, const cxVec& hitNrm, float hitDist, const QuadInfo& quadInfo) { return false; }
 	};
 
 	class RangeFunc {
@@ -425,9 +425,11 @@ struct sxGeometryData : public sxData {
 	AttrInfo* get_pnt_attr_info(int attrIdx) const { return get_attr_info(attrIdx, eAttrClass::POINT); }
 	AttrInfo* get_pol_attr_info(int attrIdx) const { return get_attr_info(attrIdx, eAttrClass::POLYGON); }
 	float* get_attr_data_f(int attrIdx, eAttrClass cls, int itemIdx, int minElem = 1) const;
-	float* get_glb_attr_data_f(int attrIdx, eAttrClass cls, int minElem = 1) const { return get_attr_data_f(attrIdx, eAttrClass::GLOBAL, 0, minElem); }
-	float* get_pnt_attr_data_f(int attrIdx, eAttrClass cls, int itemIdx, int minElem = 1) const { return get_attr_data_f(attrIdx, eAttrClass::POINT, itemIdx, minElem); }
-	float* get_pol_attr_data_f(int attrIdx, eAttrClass cls, int itemIdx, int minElem = 1) const { return get_attr_data_f(attrIdx, eAttrClass::POLYGON, itemIdx, minElem); }
+	float* get_glb_attr_data_f(int attrIdx, int minElem = 1) const { return get_attr_data_f(attrIdx, eAttrClass::GLOBAL, 0, minElem); }
+	float* get_pnt_attr_data_f(int attrIdx, int itemIdx, int minElem = 1) const { return get_attr_data_f(attrIdx, eAttrClass::POINT, itemIdx, minElem); }
+	float* get_pol_attr_data_f(int attrIdx, int itemIdx, int minElem = 1) const { return get_attr_data_f(attrIdx, eAttrClass::POLYGON, itemIdx, minElem); }
+	float get_pnt_attr_val_f(int attrIdx, int pntIdx) const;
+	xt_float3 get_pnt_attr_val_f3(int attrIdx, int pntIdx) const;
 	cxVec get_pnt_normal(int pntIdx) const;
 	cxVec get_pnt_tangent(int pntIdx) const;
 	cxVec get_pnt_bitangent(int pntIdx) const;
@@ -622,7 +624,7 @@ struct sxKeyframesData : public sxData {
 		bool ck_key_idx(int fno) const { return is_valid() ? (uint32_t)fno < (uint32_t)get_key_num() : false; }
 		int find_key_idx(int fno) const;
 		int get_fno(int idx) const;
-		float eval(float frm) const;
+		float eval(float frm, bool extrapolate = false) const;
 	};
 
 	bool has_node_info() const;
