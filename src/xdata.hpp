@@ -443,6 +443,10 @@ struct sxGeometryData : public sxData {
 	Group find_mtl_grp(const char* pName, const char* pPath = nullptr) const { return get_mtl_grp(find_mtl_grp_idx(pName, pPath)); }
 	GrpInfo* get_mtl_info(int idx) const;
 	Group get_mtl_grp(int idx) const;
+	GrpInfo* sxGeometryData::get_pnt_grp_info(int idx) const;
+	Group get_pnt_grp(int idx) const;
+	GrpInfo* sxGeometryData::get_pol_grp_info(int idx) const;
+	Group get_pol_grp(int idx) const;
 	void hit_query_nobvh(const cxLineSeg& seg, HitFunc& fun) const;
 	void hit_query(const cxLineSeg& seg, HitFunc& fun) const;
 	void range_query_nobvh(const cxAABB& box, RangeFunc& fun) const;

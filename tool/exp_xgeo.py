@@ -677,17 +677,21 @@ class GeoExporter(xd.BaseExporter):
 			mtl.write(bw)
 
 	def writePntGrpData(self, bw, top):
+		bw.align(0x10)
+		bw.patch(self.patchPos + 0x18, bw.getPos() - top) # -> pntGrp
 		lstTop = bw.getPos()
 		for i in xrange(self.pntGrpNum): bw.writeU32(0)
-		for g in self.pntGrp:
+		for i, g in enumerate(self.pntGrp):
 			bw.align(4)
 			bw.patch(lstTop + i*4, bw.getPos() - top)
 			g.write(bw)
 
 	def writePolGrpData(self, bw, top):
+		bw.align(0x10)
+		bw.patch(self.patchPos + 0x1C, bw.getPos() - top) # -> polGrp
 		lstTop = bw.getPos()
 		for i in xrange(self.polGrpNum): bw.writeU32(0)
-		for g in self.polGrp:
+		for i, g in enumerate(self.polGrp):
 			bw.align(4)
 			bw.patch(lstTop + i*4, bw.getPos() - top)
 			g.write(bw)

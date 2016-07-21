@@ -979,6 +979,54 @@ sxGeometryData::Group sxGeometryData::get_mtl_grp(int idx) const {
 	return grp;
 }
 
+sxGeometryData::GrpInfo* sxGeometryData::get_pnt_grp_info(int idx) const {
+	GrpInfo* pInfo = nullptr;
+	if (ck_pnt_grp_idx(idx) && mPntGrpOffs) {
+		uint32_t offs = reinterpret_cast<uint32_t*>(XD_INCR_PTR(this, mPntGrpOffs))[idx];
+		if (offs) {
+			pInfo = reinterpret_cast<GrpInfo*>(XD_INCR_PTR(this, offs));
+		}
+	}
+	return pInfo;
+}
+
+sxGeometryData::Group sxGeometryData::get_pnt_grp(int idx) const {
+	Group grp;
+	GrpInfo* pInfo = get_pnt_grp_info(idx);
+	if (pInfo) {
+		grp.mpGeom = this;
+		grp.mpInfo = pInfo;
+	} else {
+		grp.mpGeom = nullptr;
+		grp.mpInfo = nullptr;
+	}
+	return grp;
+}
+
+sxGeometryData::GrpInfo* sxGeometryData::get_pol_grp_info(int idx) const {
+	GrpInfo* pInfo = nullptr;
+	if (ck_pol_grp_idx(idx) && mPolGrpOffs) {
+		uint32_t offs = reinterpret_cast<uint32_t*>(XD_INCR_PTR(this, mPolGrpOffs))[idx];
+		if (offs) {
+			pInfo = reinterpret_cast<GrpInfo*>(XD_INCR_PTR(this, offs));
+		}
+	}
+	return pInfo;
+}
+
+sxGeometryData::Group sxGeometryData::get_pol_grp(int idx) const {
+	Group grp;
+	GrpInfo* pInfo = get_pol_grp_info(idx);
+	if (pInfo) {
+		grp.mpGeom = this;
+		grp.mpInfo = pInfo;
+	} else {
+		grp.mpGeom = nullptr;
+		grp.mpInfo = nullptr;
+	}
+	return grp;
+}
+
 void sxGeometryData::hit_query_nobvh(const cxLineSeg& seg, HitFunc& fun) const {
 	cxVec hitPos;
 	cxVec hitNrm;

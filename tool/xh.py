@@ -13,12 +13,12 @@ def texPathToName(path):
 		name = name[:name.rfind(".")]
 	return name
 
-def findSOPEXP(rootPath="/obj"):
+def findSOPEXP(rootPath = "/obj", expNodeName = "EXP"):
 	sopEXP = None
 	objList = hou.node(rootPath).children()
 	for obj in objList:
 		if obj.type().name() == "geo":
-			tstSOP = hou.node(obj.path() + "/EXP")
+			tstSOP = hou.node(obj.path() + "/" + expNodeName)
 			if tstSOP:
 				sopEXP = tstSOP
 				break
@@ -210,6 +210,7 @@ def qgetRot(q, rord, std=False):
 	tbl = [qezyx, qeyzx, None, None, qezxy, None, qexzy, None, None, qeyxz, qexyz]
 	return tbl[qord(rord)](q)
 
+# http://www.geometrictools.com/Documentation/ConstrainedQuaternions.pdf
 def qgetClosestXY(q):
 	x = q[0]
 	y = q[1]
@@ -711,6 +712,10 @@ class MtlInfo:
 						self.mtl = mtl
 						prm = mtl.parm("ogl_tex1")
 						if prm: self.baseMapPath = prm.evalAsString()
+					elif mtl.type().name() == "GL_Basic":
+						self.mtl = mtl
+						prm = mtl.parm("g_texBase")
+						self.baseMapPath = prm.evalAsString()
 		elif shopTypeName == "mantrasurface":
 			self.mtl = self.shop
 			prm = self.mtl.parm("diff_colorTexture")
