@@ -1246,6 +1246,7 @@ int sxGeometryData::Polygon::get_mtl_id() const {
 			switch (get_mtl_id_size()) {
 				case 1:
 					mtlId = reinterpret_cast<int8_t*>(pId)[mPolId];
+					break;
 				case 2:
 				default:
 					mtlId = reinterpret_cast<int16_t*>(pId)[mPolId];

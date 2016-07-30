@@ -315,7 +315,7 @@ public:
 	}
 	void inv() { *this = inv_val(); }
 
-	float min_elem(bool absFlg) const {
+	float min_elem(bool absFlg = false) const {
 		XMVECTOR xv = XMLoadFloat3(this);
 		if (absFlg) xv = XMVectorAbs(xv);
 		float res;
@@ -324,7 +324,9 @@ public:
 		return res;
 	}
 
-	float max_elem(bool absFlg) const {
+	float min_abs_elem() const { return min_elem(true); }
+
+	float max_elem(bool absFlg = false) const {
 		XMVECTOR xv = XMLoadFloat3(this);
 		if (absFlg) xv = XMVectorAbs(xv);
 		float res;
@@ -332,6 +334,8 @@ public:
 		XMStoreFloat(&res, xv);
 		return res;
 	}
+
+	float max_abs_elem() const { return max_elem(true); }
 
 	float mag2() const { return dot(*this);	}
 	float mag_fast() const { return ::sqrtf(mag2()); }
@@ -976,6 +980,8 @@ public:
 	cxFrustum() {}
 
 	void init(const cxMtx& mtx, float fovy, float aspect, float znear, float zfar);
+
+	cxVec get_center() const;
 
 	bool cull(const cxSphere& sph) const;
 	bool overlap(const cxSphere& sph) const;

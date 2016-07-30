@@ -115,7 +115,7 @@ void cxVec::parse(const char* pStr) {
 // http://www.insomniacgames.com/mike-day-vector-length-and-normalization-difficulties/
 float cxVec::mag() const {
 	cxVec v = *this;
-	float m = v.max_elem(true);
+	float m = v.max_abs_elem();
 	v /= m;
 	float l = v.mag_fast() * m;
 	_mm_store_ss(&l, _mm_and_ps(_mm_set_ss(l), _mm_cmpneq_ss(_mm_set_ss(m), _mm_setzero_ps())));
@@ -125,7 +125,7 @@ float cxVec::mag() const {
 // see ref above
 void cxVec::normalize(const cxVec& v) {
 	cxVec n = v;
-	float m = v.max_elem(true);
+	float m = v.max_abs_elem();
 	if (m > 0.0f) {
 		n.scl(1.0f / m);
 		n.scl(1.0f / n.mag_fast());
@@ -1242,6 +1242,15 @@ void cxFrustum::init(const cxMtx& mtx, float fovy, float aspect, float znear, fl
 		mNrm[i] = mtx.calc_vec(mNrm[i]);
 	}
 	calc_planes();
+}
+
+cxVec cxFrustum::get_center() const {
+	cxVec c = mPnt[0];
+	for (int i = 1; i < 8; ++i) {
+		c += mPnt[i];
+	}
+	c /= 8.0f;
+	return c;
 }
 
 bool cxFrustum::cull(const cxSphere& sph) const {
