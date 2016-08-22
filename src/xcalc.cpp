@@ -135,7 +135,7 @@ void cxVec::normalize(const cxVec& v) {
 
 // http://lgdv.cs.fau.de/publications/publication/Pub.2010.tech.IMMD.IMMD9.onfloa/
 // http://jcgt.org/published/0003/02/01/
-XMFLOAT2 cxVec::encode_octa() const {
+XD_NOINLINE XMFLOAT2 cxVec::encode_octa() const {
 	XMFLOAT2 oct;
 	cxVec av = abs_val();
 	float d = nxCalc::rcp0(av.x + av.y + av.z);
@@ -1692,14 +1692,7 @@ static tsxEvalSH<50> s_SH50f;
 static tsxEvalSH<60> s_SH60f;
 static tsxEvalSH<70> s_SH70f;
 static tsxEvalSH<80> s_SH80f;
-static tsxEvalSH<90> s_SH90f;
-static tsxEvalSH<100> s_SH100f;
-static tsxEvalSH<110> s_SH110f;
-static tsxEvalSH<120> s_SH120f;
-static tsxEvalSH<130> s_SH130f;
-static tsxEvalSH<140> s_SH140f;
-static tsxEvalSH<150> s_SH150f;
-static tsxEvalSH<151> s_SH151f;
+
 
 #if XD_SHEVAL_F64
 static tsxEvalSH<2, double> s_SH2d;
@@ -1740,14 +1733,7 @@ _XD_SHEVAL_FUNC(50)
 _XD_SHEVAL_FUNC(60)
 _XD_SHEVAL_FUNC(70)
 _XD_SHEVAL_FUNC(80)
-_XD_SHEVAL_FUNC(90)
-_XD_SHEVAL_FUNC(100)
-_XD_SHEVAL_FUNC(110)
-_XD_SHEVAL_FUNC(120)
-_XD_SHEVAL_FUNC(130)
-_XD_SHEVAL_FUNC(140)
-_XD_SHEVAL_FUNC(150)
-_XD_SHEVAL_FUNC(151)
+
 
 #define _XD_SHEVAL_CASE(_ord_) case _ord_: eval##_ord_(pCoef, x, y, z); break;
 
@@ -1778,14 +1764,6 @@ void eval(int order, float* pCoef, float x, float y, float z) {
 		_XD_SHEVAL_CASE(60)
 		_XD_SHEVAL_CASE(70)
 		_XD_SHEVAL_CASE(80)
-		_XD_SHEVAL_CASE(90)
-		_XD_SHEVAL_CASE(100)
-		_XD_SHEVAL_CASE(110)
-		_XD_SHEVAL_CASE(120)
-		_XD_SHEVAL_CASE(130)
-		_XD_SHEVAL_CASE(140)
-		_XD_SHEVAL_CASE(150)
-		_XD_SHEVAL_CASE(151)
 	}
 }
 
@@ -1820,14 +1798,6 @@ float* get_consts_f32(int order) {
 		_XD_SHEVAL_CASE(60)
 		_XD_SHEVAL_CASE(70)
 		_XD_SHEVAL_CASE(80)
-		_XD_SHEVAL_CASE(90)
-		_XD_SHEVAL_CASE(100)
-		_XD_SHEVAL_CASE(110)
-		_XD_SHEVAL_CASE(120)
-		_XD_SHEVAL_CASE(130)
-		_XD_SHEVAL_CASE(140)
-		_XD_SHEVAL_CASE(150)
-		_XD_SHEVAL_CASE(151)
 	}
 	return pConsts;
 }

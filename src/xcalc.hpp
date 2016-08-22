@@ -126,9 +126,8 @@ inline float sinc(float x) {
 	return (::sinf(x) / x);
 }
 
-inline int sq(int x) { return x*x; }
-inline float sq(float x) { return x*x; }
-inline float cb(float x) { return x*x*x; }
+template<typename T> inline T sq(T x) { return x*x; }
+template<typename T> inline T cb(T x) { return x*x*x; }
 
 inline float div0(float x, float y) {
 	XMVECTOR vy = _mm_set_ss(y);
@@ -256,7 +255,7 @@ public:
 
 	void parse(const char* pStr);
 	void from_mem(const float* pSrc) { set(pSrc[0], pSrc[1], pSrc[2]); }
-	void to_mem(float* pDst) {
+	void to_mem(float* pDst) const {
 		pDst[0] = x;
 		pDst[1] = y;
 		pDst[2] = z;
@@ -965,6 +964,28 @@ public:
 
 	bool overlap(const cxSphere& sph) const { return sph.overlap(*this); }
 	bool overlap(const cxAABB& box) const { return nxGeom::aabb_overlap(mMin, mMax, box.mMin, box.mMax); }
+};
+
+class cxCapsule {
+protected:
+	cxVec mPos0;
+	cxVec mPos1;
+	float mRadius;
+
+public:
+	cxCapsule() {}
+	cxCapsule(const cxVec& p0, const cxVec& p1, float radius) { set(p0, p1, radius); }
+
+	void set(const cxVec& p0, const cxVec& p1, float radius) {
+		mPos0 = p0;
+		mPos1 = p1;
+		mRadius = radius;
+	}
+
+	cxVec get_pos0() const { return mPos0; }
+	cxVec get_pos1() const { return mPos1; }
+	float get_radius() const { return mRadius; }
+	cxVec get_center() const { return (mPos0 + mPos1) * 0.5f; }
 };
 
 class cxFrustum {

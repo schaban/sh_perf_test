@@ -7,9 +7,22 @@
 #define XD_USE_DXPKV 0
 #if XD_USE_DXPKV
 #	include <DirectXPackedVector.h>
+using namespace DirectX::PackedVector;
 #endif
 
-#define _XD_SET_XYZW(_x, _y, _z, _w) _mm_set_ps(_w, _z, _y, _x)
+#define _XD_SET_FQV_XYZW(_x, _y, _z, _w) _mm_set_ps(_w, _z, _y, _x)
+
+#define _XD_GET_FQV_X(_v) _mm_cvtss_f32(_v)
+#define _XD_GET_FQV_Y(_v) _mm_cvtss_f32(_mm_shuffle_ps(_v, _v, 0x55))
+#define _XD_GET_FQV_Z(_v) _mm_cvtss_f32(_mm_shuffle_ps(_v, _v, 0xAA))
+#define _XD_GET_FQV_W(_v) _mm_cvtss_f32(_mm_shuffle_ps(_v, _v, 0xFF))
+
+#define _XD_SET_IQV_XYZW(_x, _y, _z, _w) _mm_set_epi32(_w, _z, _y, _x)
+
+#define _XD_GET_IQV_X(_v) _mm_cvtsi128_si32(_v)
+#define _XD_GET_IQV_Y(_v) _mm_cvtsi128_si32(_mm_shuffle_epi32(_v, 0x55))
+#define _XD_GET_IQV_Z(_v) _mm_cvtsi128_si32(_mm_shuffle_epi32(_v, 0xAA))
+#define _XD_GET_IQV_W(_v) _mm_cvtsi128_si32(_mm_shuffle_epi32(_v, 0xFF))
 
 namespace nxCore {
 
@@ -377,6 +390,117 @@ static void set_obj_name(char* pDst, size_t dstSize, const char* pName) {
 }
 
 
+void xt_half::set(float f) {
+#if XD_USE_DXPKV
+	x = (uint16_t)XMConvertFloatToHalf(f);
+#else
+	x = (uint16_t)_mm_cvtsi128_si32(_mm_cvtps_ph(_mm_set_ps1(f), 0 /* round */));
+#endif
+}
+
+float xt_half::get() const {
+#if XD_USE_DXPKV
+	return XMConvertHalfToFloat(x);
+#else
+	return _mm_cvtss_f32(_mm_cvtph_ps(_mm_set1_epi32(x)));
+#endif
+}
+
+
+void xt_half2::set(float fx, float fy) {
+#if XD_USE_DXPKV
+	XMHALF2 h(fx, fy);
+	x = h.x;
+	y = h.y;
+#else
+	int h = _XD_GET_IQV_X(_mm_cvtps_ph(_XD_SET_FQV_XYZW(fx, fy, fx, fy), 0 /* round */));
+	x = (uint16_t)(h & 0xFFFF);
+	y = (uint16_t)((h >> 16) & 0xFFFF);
+#endif
+}
+
+
+xt_float2 xt_half2::get() const {
+	xt_float2 fv;
+#if XD_USE_DXPKV
+	fv.x = XMConvertHalfToFloat(x);
+	fv.y = XMConvertHalfToFloat(y);
+#else
+	__m128 fqv = _mm_cvtph_ps(_mm_set1_epi32((int)x | ((int)y<<16)));
+	fv.x = _XD_GET_FQV_X(fqv);
+	fv.y = _XD_GET_FQV_Y(fqv);
+#endif
+	return fv;
+}
+
+
+void xt_half3::set(float fx, float fy, float fz) {
+#if XD_USE_DXPKV
+	XMHALF2 h(fx, fy);
+	x = h.x;
+	y = h.y;
+	z = (uint16_t)XMConvertFloatToHalf(fz);
+#else
+	__m128i iqv = _mm_cvtps_ph(_XD_SET_FQV_XYZW(fx, fy, fz, 0.0f), 0 /* round */);
+	uint32_t ixy = (uint32_t)_XD_GET_IQV_X(iqv);
+	x = (uint16_t)(ixy & 0xFFFF);
+	y = (uint16_t)((ixy >> 16) & 0xFFFF);
+	z = (uint16_t)_XD_GET_IQV_Y(iqv);
+#endif
+}
+
+xt_float3 xt_half3::get() const {
+	xt_float3 fv;
+#if XD_USE_DXPKV
+	fv.x = XMConvertHalfToFloat(x);
+	fv.y = XMConvertHalfToFloat(y);
+	fv.z = XMConvertHalfToFloat(z);
+#else
+	__m128 fqv = _mm_cvtph_ps(_XD_SET_IQV_XYZW((int)x | ((int)y << 16), z, 0, 0));
+	fv.x = _XD_GET_FQV_X(fqv);
+	fv.y = _XD_GET_FQV_Y(fqv);
+	fv.z = _XD_GET_FQV_Z(fqv);
+#endif
+	return fv;
+}
+
+
+void xt_half4::set(float fx, float fy, float fz, float fw) {
+#if XD_USE_DXPKV
+	XMHALF4 h(fx, fy, fz, fw);
+	x = h.x;
+	y = h.y;
+	z = h.z;
+	w = h.w;
+#else
+	__m128i iqv = _mm_cvtps_ph(_XD_SET_FQV_XYZW(fx, fy, fz, fw), 0 /* round */);
+	uint32_t ixy = (uint32_t)_XD_GET_IQV_X(iqv);
+	x = (uint16_t)(ixy & 0xFFFF);
+	y = (uint16_t)((ixy >> 16) & 0xFFFF);
+	uint32_t izw = (uint32_t)_XD_GET_IQV_Y(iqv);
+	z = (uint16_t)(izw & 0xFFFF);
+	w = (uint16_t)((izw >> 16) & 0xFFFF);
+#endif
+}
+
+xt_float4 xt_half4::get() const {
+	xt_float4 fv;
+#if XD_USE_DXPKV
+	fv.x = XMConvertHalfToFloat(x);
+	fv.y = XMConvertHalfToFloat(y);
+	fv.z = XMConvertHalfToFloat(z);
+	fv.w = XMConvertHalfToFloat(w);
+#else
+	__m128 fqv = _mm_cvtph_ps(_XD_SET_IQV_XYZW((int)x | ((int)y << 16), (int)z | ((int)w << 16), 0, 0));
+	fv.x = _XD_GET_FQV_X(fqv);
+	fv.y = _XD_GET_FQV_Y(fqv);
+	fv.z = _XD_GET_FQV_Z(fqv);
+	fv.w = _XD_GET_FQV_W(fqv);
+#endif
+	return fv;
+}
+
+
 static inline float tex_scroll(float val, float add) {
 	val += add;
 	if (val < 0.0f) val += 1.0f;
@@ -391,11 +515,11 @@ void xt_texcoord::scroll(const xt_texcoord& step) {
 
 void xt_texcoord::encode_half(uint16_t* pDst) const {
 #if XD_USE_DXPKV
-	DirectX::PackedVector::XMHALF2 h(u, v);
+	XMHALF2 h(u, v);
 	pDst[0] = h.x;
 	pDst[1] = h.y;
 #else
-	int h = _mm_cvtsi128_si32(_mm_cvtps_ph(_XD_SET_XYZW(u, v, u, v), 0 /* round */));
+	int h = _mm_cvtsi128_si32(_mm_cvtps_ph(_XD_SET_FQV_XYZW(u, v, u, v), 0 /* round */));
 	pDst[0] = h & 0xFFFF;
 	pDst[1] = (h >> 16) & 0xFFFF;
 #endif
@@ -420,7 +544,9 @@ IDXGISwapChain* sxGfxDevice::create_swap_chain(DXGI_SWAP_CHAIN_DESC& desc) const
 						pSwp = nullptr;
 					}
 				}
+				pAdapter->Release();
 			}
+			pDXGIDev->Release();
 		}
 	}
 	return pSwp;

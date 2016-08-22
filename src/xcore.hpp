@@ -179,6 +179,37 @@ struct xt_int4 {
 	}
 };
 
+struct xt_half {
+	uint16_t x;
+
+	void set(float f);
+	float get() const;
+};
+
+struct xt_half2 {
+	uint16_t x, y;
+
+	void set(float fx, float fy);
+	void set(xt_float2 fv) { set(fv.x, fv.y); }
+	xt_float2 get() const;
+};
+
+struct xt_half3 {
+	uint16_t x, y, z;
+
+	void set(float fx, float fy, float fz);
+	void set(xt_float3 fv) { set(fv.x, fv.y, fv.z); }
+	xt_float3 get() const;
+};
+
+struct xt_half4 {
+	uint16_t x, y, z, w;
+
+	void set(float fx, float fy, float fz, float fw);
+	void set(xt_float4 fv) { set(fv.x, fv.y, fv.z, fv.w); }
+	xt_float4 get() const;
+};
+
 struct xt_texcoord {
 	float u, v;
 
