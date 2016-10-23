@@ -6,6 +6,7 @@
 #include <math.h>
 #include <float.h>
 #include <intrin.h>
+#include <memory.h>
 
 #include <DirectXMath.h>
 using namespace DirectX;
@@ -43,6 +44,7 @@ class cxQuat;
 class cxPlane;
 class cxSphere;
 class cxAABB;
+class cxCapsule;
 
 enum class exTransformOrd : uint8_t {
 	SRT = 0,
@@ -129,6 +131,14 @@ inline float sinc(float x) {
 template<typename T> inline T sq(T x) { return x*x; }
 template<typename T> inline T cb(T x) { return x*x*x; }
 
+inline float hypot(float x, float y) {
+#if 0
+	return ::hypotf(x, y);
+#else
+	return ::sqrtf(sq(x) + sq(y));
+#endif
+}
+
 inline float div0(float x, float y) {
 	XMVECTOR vy = _mm_set_ss(y);
 	XMVECTOR m = _mm_cmpneq_ss(vy, _mm_setzero_ps());
@@ -210,6 +220,7 @@ float dist(const cxVec& pos0, const cxVec& pos1);
 cxVec get_axis(exAxis axis);
 cxVec basis_xform(const cxVec& ax, const cxVec& ay, const cxVec& az, const cxVec& vec);
 cxVec from_polar_uv(float u, float v);
+cxVec reflect(const cxVec& vec, const cxVec& nrm);
 
 } // nxVec
 
@@ -350,7 +361,7 @@ public:
 	}
 
 	float azimuth() const { return ::atan2f(x, z); }
-	float elevation() const { return -::atan2f(y, ::hypotf(x, z)); }
+	float elevation() const { return -::atan2f(y, nxCalc::hypot(x, z)); }
 
 	void min(const cxVec& v) { xstore(XMVectorMin(xload(), v.xload())); }
 	void min(const cxVec& v1, const cxVec& v2) { xstore(XMVectorMin(v1.xload(), v2.xload())); }
@@ -420,6 +431,14 @@ public:
 
 	XMFLOAT2 encode_octa() const;
 	void decode_octa(const XMFLOAT2& oct);
+
+	int eq(const cxVec& v) const { return _mm_movemask_ps(_mm_cmpeq_ps(XMLoadFloat3(this), XMLoadFloat3(&v))) & 7; }
+	int ne(const cxVec& v) const { return _mm_movemask_ps(_mm_cmpneq_ps(XMLoadFloat3(this), XMLoadFloat3(&v))) & 7; }
+	int lt(const cxVec& v) const { return _mm_movemask_ps(_mm_cmplt_ps(XMLoadFloat3(this), XMLoadFloat3(&v))) & 7; }
+	int le(const cxVec& v) const { return _mm_movemask_ps(_mm_cmple_ps(XMLoadFloat3(this), XMLoadFloat3(&v))) & 7; }
+	int gt(const cxVec& v) const { return _mm_movemask_ps(_mm_cmpgt_ps(XMLoadFloat3(this), XMLoadFloat3(&v))) & 7; }
+	int ge(const cxVec& v) const { return _mm_movemask_ps(_mm_cmpge_ps(XMLoadFloat3(this), XMLoadFloat3(&v))) & 7; }
+	bool same(const cxVec& v) const { return eq(v) == 7; }
 };
 
 inline cxVec operator + (const cxVec& v1, const cxVec& v2) { cxVec v = v1; v.add(v2); return v; }
@@ -629,14 +648,27 @@ public:
 
 	void identity() { xstore(XMQuaternionIdentity()); }
 
+	void set(float x, float y, float z, float w) { xstore(XMVectorSet(x, y, z, w)); }
+
 	float get_at(int i) const { return XMVectorGetByIndex(xload(), i); }
 	void set_at(int i, float val) { xstore(XMVectorSetByIndex(xload(), val, i)); }
+	float get_x() const { return get_at(0); }
+	void set_x(float x) { set_at(0, x); }
+	float get_y() const { return get_at(1); }
+	void set_y(float y) { set_at(1, y); }
+	float get_z() const { return get_at(2); }
+	void set_z(float z) { set_at(2, z); }
+	float get_w() const { return get_at(3); }
+	void set_w(float w) { set_at(3, w); }
+	XMVECTOR get_xv() const { return xload(); }
+	void set_xv(XMVECTOR xv) { xstore(xv); }
 
 	void from_mtx(const cxMtx& m);
 	cxMtx to_mtx() const;
 	float get_axis_ang(cxVec* pAxis) const;
-	cxVec get_scaled_axis() const;
-	void from_scaled_axis(const cxVec& sa);
+	cxVec get_log_vec() const;
+	void from_log_vec(const cxVec& lvec, bool nrmFlg = true);
+	void from_vecs(const cxVec& vfrom, const cxVec& vto);
 
 	int get_zero_mask() const {
 		return _mm_movemask_ps(_mm_cmpeq_ps(xload(), _mm_setzero_ps()));
@@ -685,6 +717,16 @@ public:
 	void set_rot(float rx, float ry, float rz, exRotOrd ord = exRotOrd::XYZ);
 	void set_rot_degrees(const cxVec& r, exRotOrd ord = exRotOrd::XYZ);
 
+	cxQuat get_closest_x() const;
+	cxQuat get_closest_y() const;
+	cxQuat get_closest_z() const;
+	cxQuat get_closest_xy() const;
+	cxQuat get_closest_yx() const;
+	cxQuat get_closest_xz() const;
+	cxQuat get_closest_zx() const;
+	cxQuat get_closest_yz() const;
+	cxQuat get_closest_zy() const;
+
 	void lerp(const cxQuat& q1, const cxQuat& q2, float t) {
 		xstore(XMVectorLerp(q1.xload(), q2.xload(), t));
 		normalize();
@@ -693,8 +735,6 @@ public:
 	void slerp(const cxQuat& q1, const cxQuat& q2, float t);
 
 	cxVec apply(const cxVec& v) const { return XMVector3Rotate(v.get_xv(), xload()); }
-
-	double diff_estimate(const cxQuat& a, const cxQuat& b) const { return 1.0 - nxCalc::min(1.0, ::fabs(a.dot_d(b))); }
 };
 
 inline cxQuat operator * (const cxQuat& q1, const cxQuat& q2) { cxQuat q = q1; q.mul(q2); return q; }
@@ -706,6 +746,8 @@ inline cxQuat slerp(const cxQuat& q1, const cxQuat& q2, float t) {
 	q.slerp(q1, q2, t);
 	return q;
 }
+
+inline double diff_estimate(const cxQuat& a, const cxQuat& b) { return 1.0 - nxCalc::min(1.0, ::fabs(a.dot_d(b))); }
 
 } // nxQuat
 
@@ -826,7 +868,53 @@ cxVec poly_normal_ccw(cxVec* pVtx, int vtxNum);
 int quad_convex_ck(const cxVec& v0, const cxVec& v1, const cxVec& v2, const cxVec& v3);
 inline bool is_quad_convex(const cxVec& v0, const cxVec& v1, const cxVec& v2, const cxVec& v3) { return quad_convex_ck(v0, v1, v2, v3) == 3; }
 
-inline bool aabb_overlap(const cxVec& min0, const cxVec& max0, const cxVec& min1, const cxVec& max1) {
+inline float line_pnt_closest(const cxVec& lp0, const cxVec& lp1, const cxVec& pnt, cxVec* pClosestPos = nullptr, cxVec* pLineDir = nullptr) {
+	cxVec dir = lp1 - lp0;
+	cxVec vec = pnt - lp0;
+	float t = nxCalc::div0(vec.dot(dir), dir.dot(dir));
+	if (pClosestPos) {
+		*pClosestPos = lp0 + dir*t;
+	}
+	if (pLineDir) {
+		*pLineDir = dir;
+	}
+	return t;
+}
+
+inline cxVec seg_pnt_closest(const cxVec& sp0, const cxVec& sp1, const cxVec& pnt) {
+	cxVec dir;
+	float t = nxCalc::saturate(line_pnt_closest(sp0, sp1, pnt, nullptr, &dir));
+	return sp0 + dir*t;
+}
+
+float seg_seg_dist2(const cxVec& s0p0, const cxVec& s0p1, const cxVec& s1p0, const cxVec& s1p1, cxVec* pBridgeP0 = nullptr, cxVec* pBridgeP1 = nullptr);
+
+inline bool pnt_in_aabb(const cxVec& pos, const cxVec& min, const cxVec& max) {
+	XMVECTOR vpos = pos.get_xv();
+	XMVECTOR vmin = min.get_xv();
+	XMVECTOR vmax = max.get_xv();
+	return ((_mm_movemask_ps(_mm_and_ps(_mm_cmple_ps(vpos, vmax), _mm_cmpnlt_ps(vpos, vmin))) & 7) == 7);
+}
+
+inline bool pnt_in_sph(const cxVec& pos, const cxVec& sphc, float sphr, float* pSqDist = nullptr) {
+	float d2 = nxVec::dist2(pos, sphc);
+	float r2 = nxCalc::sq(sphr);
+	if (pSqDist) {
+		*pSqDist = d2;
+	}
+	return d2 <= r2;
+}
+
+inline bool pnt_in_cap(const cxVec& pos, const cxVec& cp0, const cxVec& cp1, float cr, float* pSqDist = nullptr) {
+	float d2 = nxVec::dist2(pos, seg_pnt_closest(cp0, cp1, pos));
+	float r2 = nxCalc::sq(cr);
+	if (pSqDist) {
+		*pSqDist = d2;
+	}
+	return d2 <= r2;
+}
+
+inline bool aabb_aabb_overlap(const cxVec& min0, const cxVec& max0, const cxVec& min1, const cxVec& max1) {
 	XMVECTOR vmin0 = min0.get_xv();
 	XMVECTOR vmax0 = max0.get_xv();
 	XMVECTOR vmin1 = min1.get_xv();
@@ -835,12 +923,34 @@ inline bool aabb_overlap(const cxVec& min0, const cxVec& max0, const cxVec& min1
 	return ((m & 7) == 7);
 }
 
-inline bool pnt_in_aabb(const cxVec& pos, const cxVec& min, const cxVec& max) {
-	XMVECTOR vpos = pos.get_xv();
-	XMVECTOR vmin = min.get_xv();
-	XMVECTOR vmax = max.get_xv();
-	return ((_mm_movemask_ps(_mm_and_ps(_mm_cmple_ps(vpos, vmax), _mm_cmpnlt_ps(vpos, vmin))) & 7) == 7);
+inline bool sph_sph_overlap(const cxVec& s0c, float s0r, const cxVec& s1c, float s1r) {
+	float cdd = nxVec::dist2(s0c, s1c);
+	float rsum = s0r + s1r;
+	return cdd <= nxCalc::sq(rsum);
 }
+
+inline bool sph_aabb_overlap(const cxVec& sc, float sr, const cxVec& bmin, const cxVec& bmax) {
+	cxVec pos = sc.get_clamped(bmin, bmax);
+	float dd = nxVec::dist2(sc, pos);
+	return dd <= nxCalc::sq(sr);
+}
+
+inline bool sph_cap_overlap(const cxVec& sc, float sr, const cxVec& cp0, const cxVec& cp1, float cr, cxVec* pCapAxisPos = nullptr) {
+	cxVec pos = seg_pnt_closest(cp0, cp1, sc);
+	bool flg = sph_sph_overlap(sc, sr, pos, cr);
+	if (flg && pCapAxisPos) {
+		*pCapAxisPos = pos;
+	}
+	return flg;
+}
+
+inline bool cap_cap_overlap(const cxVec& c0p0, const cxVec& c0p1, float cr0, const cxVec& c1p0, const cxVec& c1p1, float cr1) {
+	float dist2 = seg_seg_dist2(c0p0, c0p1, c1p0, c1p1);
+	float rsum2 = nxCalc::sq(cr0 + cr1);
+	return dist2 <= rsum2;
+}
+
+bool cap_aabb_overlap(const cxVec& cp0, const cxVec& cp1, float cr, const cxVec& bmin, const cxVec& bmax);
 
 } // nxGeom
 
@@ -901,17 +1011,11 @@ public:
 	float volume() const { return (4.0f*XM_PI / 3.0f) * nxCalc::cb(get_radius()); }
 	float surf_area() const { return 4.0f*XM_PI * nxCalc::sq(get_radius()); }
 
-	bool contains(const cxVec& pos, float* pSqDist = nullptr) const {
-		float dd = nxVec::dist2(pos, get_center());
-		float rr = nxCalc::sq(get_radius());
-		if (pSqDist) {
-			*pSqDist = dd;
-		}
-		return dd <= rr;
-	}
+	bool contains(const cxVec& pos, float* pSqDist = nullptr) const { return nxGeom::pnt_in_sph(pos, get_center(), get_radius(), pSqDist); }
 
-	bool overlap(const cxSphere& sph) const;
-	bool overlap(const cxAABB& box) const;
+	bool overlaps(const cxSphere& sph) const;
+	bool overlaps(const cxAABB& box) const;
+	bool overlaps(const cxCapsule& cap, cxVec* pCapAxisPos = nullptr) const;
 };
 
 class cxAABB {
@@ -962,8 +1066,9 @@ public:
 	bool seg_ck(const cxVec& p0, const cxVec& p1) const;
 	bool seg_ck(const cxLineSeg& seg) const { return seg_ck(seg.get_pos0(), seg.get_pos1()); }
 
-	bool overlap(const cxSphere& sph) const { return sph.overlap(*this); }
-	bool overlap(const cxAABB& box) const { return nxGeom::aabb_overlap(mMin, mMax, box.mMin, box.mMax); }
+	bool overlaps(const cxSphere& sph) const { return sph.overlaps(*this); }
+	bool overlaps(const cxAABB& box) const { return nxGeom::aabb_aabb_overlap(mMin, mMax, box.mMin, box.mMax); }
+	bool overlaps(const cxCapsule& cap) const;
 };
 
 class cxCapsule {
@@ -986,6 +1091,13 @@ public:
 	cxVec get_pos1() const { return mPos1; }
 	float get_radius() const { return mRadius; }
 	cxVec get_center() const { return (mPos0 + mPos1) * 0.5f; }
+	float get_bounding_radius() const { return nxVec::dist(mPos0, mPos1)*0.5f + mRadius; }
+
+	bool contains(const cxVec& pos, float* pSqDist = nullptr) const { return nxGeom::pnt_in_cap(pos, get_pos0(), get_pos1(), get_radius(), pSqDist); }
+
+	bool overlaps(const cxSphere& sph, cxVec* pAxisPos = nullptr) const { return sph.overlaps(*this, pAxisPos); }
+	bool overlaps(const cxAABB& box) const;
+	bool overlaps(const cxCapsule& cap) const;
 };
 
 class cxFrustum {
@@ -1005,9 +1117,9 @@ public:
 	cxVec get_center() const;
 
 	bool cull(const cxSphere& sph) const;
-	bool overlap(const cxSphere& sph) const;
+	bool overlaps(const cxSphere& sph) const;
 	bool cull(const cxAABB& box) const;
-	bool overlap(const cxAABB& box) const;
+	bool overlaps(const cxAABB& box) const;
 };
 
 namespace nxGeom {
@@ -1019,6 +1131,17 @@ inline cxAABB mk_empty_bbox() {
 }
 
 } // nxGeom
+
+
+namespace nxColl {
+
+const float defMargin = 1e-2f;
+
+bool separate_sph_sph(const cxSphere& mvSph, cxVec& vel, cxSphere& stSph, cxVec* pSepVec, float margin = defMargin);
+bool adjust_sph_sph(const cxSphere& mvSph, cxVec& vel, cxSphere& stSph, cxVec* pAdjPos, float margin = defMargin);
+bool separate_sph_cap(const cxSphere& mvSph, cxVec& vel, cxCapsule& stCap, cxVec* pSepVec, float margin = defMargin);
+
+} // nxColl
 
 
 class cxBasicIK {

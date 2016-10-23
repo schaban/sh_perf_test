@@ -1059,7 +1059,7 @@ struct sxBVHWork {
 static void BVH_hit_sub(sxBVHWork& wk, int nodeId) {
 	if (wk.mStopFlg) return;
 	sxGeometryData::BVH::Node* pNode = wk.mpGeo->get_BVH_node(nodeId);
-	if (pNode->mBBox.overlap(wk.mQryBBox) && pNode->mBBox.seg_ck(wk.mQrySeg)) {
+	if (pNode->mBBox.overlaps(wk.mQryBBox) && pNode->mBBox.seg_ck(wk.mQrySeg)) {
 		if (pNode->is_leaf()) {
 			cxVec hitPos;
 			cxVec hitNrm;
@@ -1099,7 +1099,7 @@ void sxGeometryData::range_query_nobvh(const cxAABB& box, RangeFunc& fun) const 
 	int npol = get_pol_num();
 	for (int i = 0; i < npol; ++i) {
 		Polygon pol = get_pol(i);
-		bool rangeFlg = pol.calc_bbox().overlap(box);
+		bool rangeFlg = pol.calc_bbox().overlaps(box);
 		if (rangeFlg) {
 			bool contFlg = fun(pol);
 			if (!contFlg) {
@@ -1112,7 +1112,7 @@ void sxGeometryData::range_query_nobvh(const cxAABB& box, RangeFunc& fun) const 
 static void BVH_range_sub(sxBVHWork& wk, int nodeId) {
 	if (wk.mStopFlg) return;
 	sxGeometryData::BVH::Node* pNode = wk.mpGeo->get_BVH_node(nodeId);
-	if (wk.mQryBBox.overlap(pNode->mBBox)) {
+	if (wk.mQryBBox.overlaps(pNode->mBBox)) {
 		if (pNode->is_leaf()) {
 			sxGeometryData::Polygon pol = wk.mpGeo->get_pol(pNode->get_pol_id());
 			bool contFlg = (*wk.mpRangeFunc)(pol);

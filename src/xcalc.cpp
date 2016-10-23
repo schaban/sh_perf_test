@@ -103,6 +103,10 @@ cxVec from_polar_uv(float u, float v) {
 #endif
 }
 
+cxVec reflect(const cxVec& vec, const cxVec& nrm) {
+	return vec - nrm*vec.dot(nrm)*2.0f;
+}
+
 } // nxVec
 
 void cxVec::parse(const char* pStr) {
@@ -557,7 +561,8 @@ float cxQuat::get_axis_ang(cxVec* pAxis) const {
 	return ang;
 }
 
-cxVec cxQuat::get_scaled_axis() const {
+#if 1
+cxVec cxQuat::get_log_vec() const {
 	float cosh = w;
 	float hang = ::acosf(cosh);
 	cxVec axis(x, y, z);
@@ -566,14 +571,48 @@ cxVec cxQuat::get_scaled_axis() const {
 	return axis;
 }
 
-void cxQuat::from_scaled_axis(const cxVec& sa) {
-	float hang = sa.mag();
+void cxQuat::from_log_vec(const cxVec& lvec, bool nrmFlg) {
+	float hang = lvec.mag();
 	float cosh = ::cosf(hang);
-	cxVec axis = sa * nxCalc::sinc(hang);
+	cxVec axis = lvec * nxCalc::sinc(hang);
 	x = axis.x;
 	y = axis.y;
 	z = axis.z;
 	w = cosh;
+	if (nrmFlg) {
+		normalize();
+	}
+}
+#else
+cxVec cxQuat::get_log_vec() const {
+	return XMQuaternionLn(xload());
+}
+
+void cxQuat::from_log_vec(const cxVec& lvec, bool nrmFlg) {
+	xstore(XMQuaternionExp(lvec.get_xv()));
+	if (nrmFlg) {
+		normalize();
+	}
+}
+#endif
+
+void cxQuat::from_vecs(const cxVec& vfrom, const cxVec& vto) {
+	cxVec axis = nxVec::cross(vfrom, vto);
+	float sqm = axis.mag2();
+	if (sqm == 0.0f) {
+		identity();
+	} else {
+		float d = vfrom.dot(vto);
+		if (d == 1.0f) {
+			identity();
+		} else {
+			float c = ::sqrtf((1.0f + d) * 0.5f);
+			float s = ::sqrtf((1.0f - d) * 0.5f);
+			axis.scl(nxCalc::rcp0(::sqrtf(sqm)) * s);
+			xstore(XMVectorSetW(axis.get_xv(), c));
+			normalize();
+		}
+	}
 }
 
 void cxQuat::set_rot(const cxVec& axis, float ang) {
@@ -675,6 +714,96 @@ void cxQuat::set_rot(float rx, float ry, float rz, exRotOrd ord) {
 void cxQuat::set_rot_degrees(const cxVec& r, exRotOrd ord) {
 	cxVec rr = r * XD_DEG2RAD(1.0f);
 	set_rot(rr.x, rr.y, rr.z, ord);
+}
+
+// http://www.geometrictools.com/Documentation/ConstrainedQuaternions.pdf
+
+static inline cxQuat closest_quat_by_axis(const cxQuat& qsrc, int axis) {
+	cxQuat qres;
+	qres.identity();
+	float e = qsrc.get_at(axis);
+	float w = qsrc.get_w();
+	float sqmag = nxCalc::sq(e) + nxCalc::sq(w);
+	if (sqmag > 0.0f) {
+		float imag = nxCalc::rcp0(::sqrtf(sqmag));
+		qres.set_at(axis, e*imag);
+		qres.set_w(w*imag);
+	}
+	return qres;
+}
+
+cxQuat cxQuat::get_closest_x() const { return closest_quat_by_axis(*this, 0); }
+
+cxQuat cxQuat::get_closest_y() const { return closest_quat_by_axis(*this, 1); }
+
+cxQuat cxQuat::get_closest_z() const { return closest_quat_by_axis(*this, 2); }
+
+cxQuat cxQuat::get_closest_xy() const {
+	cxQuat q;
+	float x = get_x();
+	float y = get_y();
+	float z = get_z();
+	float w = get_w();
+	float det = ::fabsf(-x*y - z*w);
+	float imag;
+	if (det < 0.5f) {
+		float d = ::sqrtf(::fabsf(1.0f - 4.0f*nxCalc::sq(det)));
+		float a = x*w - y*z;
+		float b = nxCalc::sq(w) - nxCalc::sq(x) + nxCalc::sq(y) - nxCalc::sq(z);
+		float s0, c0;
+		if (b >= 0.0f) {
+			s0 = a;
+			c0 = (d + b)*0.5f;
+		} else {
+			s0 = (d - b)*0.5f;
+			c0 = a;
+		}
+		imag = nxCalc::rcp0(nxCalc::hypot(s0, c0));
+		s0 *= imag;
+		c0 *= imag;
+
+		float s1 = y*c0 - z*s0;
+		float c1 = w*c0 + x*s0;
+		imag = nxCalc::rcp0(nxCalc::hypot(s1, c1));
+		s1 *= imag;
+		c1 *= imag;
+
+		q.set(s0*c1, c0*s1, -s0*s1, c0*c1);
+	} else {
+		imag = nxCalc::rcp0(::sqrtf(det));
+		q.set(x*imag, 0.0f, 0.0f, w*imag);
+	}
+	return q;
+}
+
+cxQuat cxQuat::get_closest_yx() const {
+	cxQuat q = cxQuat(get_x(), get_y(), -get_z(), get_w()).get_closest_xy();
+	q.set_z(-q.get_z());
+	return q;
+}
+
+cxQuat cxQuat::get_closest_xz() const {
+	cxQuat q = cxQuat(get_x(), get_z(), get_y(), get_w()).get_closest_yx();
+	q.xstore(XD_SHUF(q.xload(), 0, 2, 1, 3));
+	return q;
+}
+
+cxQuat cxQuat::get_closest_zx() const {
+	cxQuat q = cxQuat(get_x(), get_z(), get_y(), get_w()).get_closest_xy();
+	q.xstore(XD_SHUF(q.xload(), 0, 2, 1, 3));
+	return q;
+}
+
+cxQuat cxQuat::get_closest_yz() const {
+	cxQuat q = cxQuat(get_y(), get_z(), get_x(), get_w()).get_closest_xy();
+	q.xstore(XD_SHUF(q.xload(), 2, 0, 1, 3));
+	return q;
+}
+
+cxQuat cxQuat::get_closest_zy() const {
+	cxQuat q = cxQuat(get_y(), get_z(), get_x(), get_w()).get_closest_yx();
+	q.xstore(XD_SHUF(q.xload(), 2, 0, 1, 3));
+	return q;
 }
 
 void cxQuat::slerp(const cxQuat& q1, const cxQuat& q2, float t) {
@@ -1104,20 +1233,149 @@ cxVec poly_normal_ccw(cxVec* pVtx, int vtxNum) {
 	return nrm;
 }
 
+float seg_seg_dist2(const cxVec& s0p0, const cxVec& s0p1, const cxVec& s1p0, const cxVec& s1p1, cxVec* pBridgeP0, cxVec* pBridgeP1) {
+	static float eps = 1e-6f;
+	float t0 = 0.0f;
+	float t1 = 0.0f;
+	cxVec dir0 = s0p1 - s0p0;
+	cxVec dir1 = s1p1 - s1p0;
+	cxVec vec = s0p0 - s1p0;
+	float len0 = dir0.mag2();
+	float len1 = dir1.mag2();
+	float vd1 = vec.dot(dir1);
+	if (len0 <= eps) {
+		if (len1 > eps) {
+			t1 = nxCalc::saturate(vd1 / len1);
+		}
+	} else {
+		float vd0 = vec.dot(dir0);
+		if (len1 <= eps) {
+			t0 = nxCalc::saturate(-vd0 / len0);
+		} else {
+			float dd = dir0.dot(dir1);
+			float dn = len0*len1 - nxCalc::sq(dd);
+			if (dn != 0.0f) {
+				t0 = nxCalc::saturate((dd*vd1 - vd0*len1) / dn);
+			}
+			t1 = (dd*t0 + vd1) / len1;
+			if (t1 < 0.0f) {
+				t0 = nxCalc::saturate(-vd0 / len0);
+				t1 = 0.0f;
+			} else if (t1 > 1.0f) {
+				t0 = nxCalc::saturate((dd - vd0) / len0);
+				t1 = 1.0f;
+			}
+		}
+	}
+	cxVec bp0 = s0p0 + dir0*t0;
+	cxVec bp1 = s1p0 + dir1*t1;
+	if (pBridgeP0) {
+		*pBridgeP0 = bp0;
+	}
+	if (pBridgeP1) {
+		*pBridgeP1 = bp1;
+	}
+	return (bp1 - bp0).mag2();
+}
+
+bool cap_aabb_overlap(const cxVec& cp0, const cxVec& cp1, float cr, const cxVec& bmin, const cxVec& bmax) {
+	cxVec brad = (bmax - bmin) * 0.5f;
+	cxVec bcen = (bmin + bmax) * 0.5f;
+	cxVec ccen = (cp0 + cp1) * 0.5f;
+	cxVec h = (cp1 - cp0) * 0.5f;
+	cxVec v = ccen - bcen;
+	cxVec d0 = v.abs_val();
+	cxVec d1 = h.abs_val() + brad + cxVec(cr);
+	if (d0.gt(d1)) return false;
+	cxVec tpos;
+	line_pnt_closest(cp0, cp1, bcen, &tpos);
+	cxVec a = (tpos - bcen).get_normalized();
+	if (::fabsf(v.dot(a)) > ::fabsf(brad.dot(a)) + cr) return false;
+	return true;
+}
+
 } // nxGeom
 
 
-bool cxSphere::overlap(const cxSphere& sph) const {
-	float cdd = nxVec::dist2(get_center(), sph.get_center());
-	float rsum = get_radius() + sph.get_radius();
-	return cdd <= nxCalc::sq(rsum);
+namespace nxColl {
+
+bool separate_sph_sph(const cxSphere& mvSph, cxVec& vel, cxSphere& stSph, cxVec* pSepVec, float margin) {
+	cxVec sepVec;
+	sepVec.zero();
+	bool flg = mvSph.overlaps(stSph);
+	if (flg) {
+		float sepDist = mvSph.get_radius() + stSph.get_radius() + margin;
+		cxVec sepDir = vel.neg_val();
+		cxVec dv = mvSph.get_center() - stSph.get_center();
+		cxVec vec = dv + sepDir*dv.mag();
+		float len = vec.mag();
+		if (len < 1e-5f) {
+			vec = sepDir.get_normalized();
+		} else {
+			sepDist /= len;
+		}
+		sepVec = vec*sepDist - dv;
+	}
+	if (pSepVec) {
+		*pSepVec = sepVec;
+	}
+	return flg;
 }
 
-bool cxSphere::overlap(const cxAABB& box) const {
-	cxVec c = get_center();
-	cxVec pos = c.get_clamped(box.get_min_pos(), box.get_max_pos());
-	float dd = nxVec::dist2(c, pos);
-	return dd <= nxCalc::sq(get_radius());
+bool adjust_sph_sph(const cxSphere& mvSph, cxVec& vel, cxSphere& stSph, cxVec* pAdjPos, float margin) {
+	cxVec sepVec;
+	cxVec tstPos = mvSph.get_center();
+	cxVec adjPos = tstPos;
+	bool flg = separate_sph_sph(mvSph, vel, stSph, &sepVec, margin);
+	if (flg) {
+		cxVec nv = (tstPos + sepVec - stSph.get_center()).get_normalized();
+		cxVec rv = nxVec::reflect(vel, nv);
+		adjPos += rv;
+		cxSphere tstSph(adjPos, mvSph.get_radius());
+		if (tstSph.overlaps(stSph)) {
+			adjPos = tstPos + sepVec;
+		}
+	}
+	if (pAdjPos) {
+		*pAdjPos = adjPos;
+	}
+	return flg;
+}
+
+bool separate_sph_cap(const cxSphere& mvSph, cxVec& vel, cxCapsule& stCap, cxVec* pSepVec, float margin) {
+	cxVec sepVec;
+	sepVec.zero();
+	cxVec axisPnt;
+	bool flg = mvSph.overlaps(stCap, &axisPnt);
+	if (flg) {
+		float sepDist = mvSph.get_radius() + stCap.get_radius() + margin;
+		cxVec sepDir = vel.neg_val();
+		cxVec dv = mvSph.get_center() - axisPnt;
+		cxVec vec = dv + sepDir*dv.mag();
+		float len = vec.mag();
+		if (len < 1e-5f) {
+			vec = sepDir.get_normalized();
+		} else {
+			sepDist /= len;
+		}
+		sepVec = vec*sepDist - dv;
+	}
+	return flg;
+}
+
+} // nxColl
+
+
+bool cxSphere::overlaps(const cxSphere& sph) const {
+	return nxGeom::sph_sph_overlap(get_center(), get_radius(), sph.get_center(), sph.get_radius());
+}
+
+bool cxSphere::overlaps(const cxAABB& box) const {
+	return nxGeom::sph_aabb_overlap(get_center(), get_radius(), box.get_min_pos(), box.get_max_pos());
+}
+
+bool cxSphere::overlaps(const cxCapsule& cap, cxVec* pCapAxisPos) const {
+	return nxGeom::sph_cap_overlap(get_center(), get_radius(), cap.get_pos0(), cap.get_pos1(), cap.get_radius(), pCapAxisPos);
 }
 
 
@@ -1198,6 +1456,18 @@ bool cxAABB::seg_ck(const cxVec& p0, const cxVec& p1) const {
 	return true;
 }
 
+bool cxAABB::overlaps(const cxCapsule& cap) const {
+	return nxGeom::cap_aabb_overlap(cap.get_pos0(), cap.get_pos1(), cap.get_radius(), mMin, mMax);
+}
+
+
+bool cxCapsule::overlaps(const cxAABB& box) const {
+	return nxGeom::cap_aabb_overlap(mPos0, mPos1, mRadius, box.get_min_pos(), box.get_max_pos());
+}
+
+bool cxCapsule::overlaps(const cxCapsule& cap) const {
+	return nxGeom::cap_cap_overlap(mPos0, mPos1, mRadius, cap.mPos0, cap.mPos1, cap.mRadius);
+}
 
 
 void cxFrustum::calc_normals() {
@@ -1265,7 +1535,7 @@ bool cxFrustum::cull(const cxSphere& sph) const {
 	return false;
 }
 
-bool cxFrustum::overlap(const cxSphere& sph) const {
+bool cxFrustum::overlaps(const cxSphere& sph) const {
 	float sd = FLT_MAX;
 	bool flg = false;
 	cxVec c = sph.get_center();
@@ -1307,7 +1577,7 @@ bool cxFrustum::cull(const cxAABB& box) const {
 	return false;
 }
 
-bool cxFrustum::overlap(const cxAABB& box) const {
+bool cxFrustum::overlaps(const cxAABB& box) const {
 	static struct {
 		uint8_t i0, i1;
 	} edgeTbl[] = {
