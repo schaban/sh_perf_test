@@ -165,6 +165,9 @@ void cxVec::decode_octa(const XMFLOAT2& oct) {
 	if (z < 0.0f) {
 		x = (1.0f - ay) * (ox < 0.0f ? -1.0f : 1.0f);
 		y = (1.0f - ax) * (oy < 0.0f ? -1.0f : 1.0f);
+	} else {
+		x = ox;
+		y = oy;
 	}
 	normalize();
 }
@@ -613,6 +616,34 @@ void cxQuat::from_vecs(const cxVec& vfrom, const cxVec& vto) {
 			normalize();
 		}
 	}
+}
+
+cxMtx cxQuat::get_mul_mtx_r() const {
+	cxMtx m;
+	float tm[] = {
+		 w, -z,  y, -x,
+		 z,  w, -x, -y,
+		-y,  x,  w, -z,
+		 x,  y,  z,  w
+	};
+	m.from_mem(tm);
+	return m;
+}
+
+cxMtx cxQuat::get_mul_mtx_l() const {
+	cxMtx m;
+	float tm[] = {
+		 w,  z, -y, -x,
+		-z,  w,  x, -y,
+		 y, -x,  w, -z,
+		 x,  y,  z,  w
+	};
+	m.from_mem(tm);
+	return m;
+}
+
+void cxQuat::from_mul_mtx(const cxMtx& mtx) {
+	xstore(mtx.get_row(3));
 }
 
 void cxQuat::set_rot(const cxVec& axis, float ang) {

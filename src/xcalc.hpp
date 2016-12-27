@@ -669,6 +669,9 @@ public:
 	cxVec get_log_vec() const;
 	void from_log_vec(const cxVec& lvec, bool nrmFlg = true);
 	void from_vecs(const cxVec& vfrom, const cxVec& vto);
+	cxMtx get_mul_mtx_r() const;
+	cxMtx get_mul_mtx_l() const;
+	void from_mul_mtx(const cxMtx& mtx);
 
 	int get_zero_mask() const {
 		return _mm_movemask_ps(_mm_cmpeq_ps(xload(), _mm_setzero_ps()));
