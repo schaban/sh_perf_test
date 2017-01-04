@@ -393,7 +393,7 @@ struct sxGeometryData : public sxData {
 	int get_pol_grp_num() const { return mPolGrpNum; }
 	bool is_same_pol_size() const { return !!(mFlags & 1); }
 	bool is_same_pol_mtl() const { return !!(mFlags & 2); }
-	bool has_shin_spheres() const { return !!(mFlags & 4); }
+	bool has_skin_spheres() const { return !!(mFlags & 4); }
 	bool is_all_tris() const { return is_same_pol_size() && mMaxVtxPerPol == 3; }
 	bool has_skin() const { return mSkinOffs != 0; }
 	bool has_skin_nodes() const { return mSkinNodesOffs != 0; }

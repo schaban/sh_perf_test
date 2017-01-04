@@ -1387,7 +1387,7 @@ void* sxGeometryData::Group::get_idx_top() const {
 	if (pIdxTop) {
 		int nskn = mpInfo->mSkinNodeNum;
 		if (nskn) {
-			if (mpGeom->has_shin_spheres()) {
+			if (mpGeom->has_skin_spheres()) {
 				pIdxTop = XD_INCR_PTR(pIdxTop, sizeof(cxSphere)*nskn); /* skip spheres */
 			}
 			pIdxTop = XD_INCR_PTR(pIdxTop, sizeof(uint16_t)*nskn); /* skip node list */
