@@ -214,6 +214,19 @@ inline void transpose3(XMVECTOR* pDst, const XMVECTOR* pSrc) {
 	pDst[2] = _mm_movelh_ps(t1, t3);
 }
 
+inline XMVECTOR cb_root(XMVECTOR v) {
+	XMVECTOR av = XMVectorAbs(v);
+	XMVECTOR trd = XMVectorReplicate(1.0f / 3.0f);
+#if 0
+	XMVECTOR rv = XMVectorPow(av, trd);
+#else
+	XMVECTOR rv = XMVectorExp(XMVectorLog(av) * trd);
+#endif
+	XMVECTOR m = _mm_cmplt_ps(v, _mm_setzero_ps());
+	rv *= _mm_or_ps(_mm_and_ps(m, XMVectorReplicate(-1.0f)), _mm_andnot_ps(m, XMVectorReplicate(1.0f)));
+	return rv;
+}
+
 float dist2(const cxVec& pos0, const cxVec& pos1);
 float dist(const cxVec& pos0, const cxVec& pos1);
 
@@ -802,15 +815,28 @@ public:
 	void from_HSV(XMVECTOR hsv);
 	XMVECTOR to_YCgCo() const;
 	void from_YCgCo(XMVECTOR ygo);
+	XMVECTOR to_TMI() const;
+	void from_TMI(XMVECTOR tmi);
 };
 
 namespace nxColor {
 
-float luma(XMVECTOR xrgb);
-float luma_hd(XMVECTOR xrgb);
-float luminance(XMVECTOR xrgb);
-XMVECTOR RGB_to_YCgCo(XMVECTOR xrgb);
-XMVECTOR YCgCo_to_RGB(XMVECTOR xygo);
+float luma(XMVECTOR vrgb);
+float luma_hd(XMVECTOR vrgb);
+float luminance(XMVECTOR vrgb);
+XMVECTOR RGB_to_YCgCo(XMVECTOR vrgb);
+XMVECTOR YCgCo_to_RGB(XMVECTOR vygo);
+XMVECTOR RGB_to_TMI(XMVECTOR vrgb);
+XMVECTOR TMI_to_RGB(XMVECTOR vtmi);
+XMVECTOR RGB_to_XYZ(XMVECTOR vrgb, cxMtx* pRGB2XYZ = nullptr);
+XMVECTOR XYZ_to_RGB(XMVECTOR vxyz, cxMtx* pXYZ2RGB = nullptr);
+XMVECTOR XYZ_to_Lab(XMVECTOR vxyz, cxMtx* pRGB2XYZ = nullptr);
+XMVECTOR Lab_to_XYZ(XMVECTOR vlab, cxMtx* pRGB2XYZ = nullptr);
+XMVECTOR RGB_to_Lab(XMVECTOR vrgb, cxMtx* pRGB2XYZ = nullptr);
+XMVECTOR Lab_to_RGB(XMVECTOR vlab, cxMtx* pRGB2XYZ = nullptr, cxMtx* pXYZ2RGB = nullptr);
+XMVECTOR Lab_to_Lch(XMVECTOR vlab);
+XMVECTOR Lch_to_Lab(XMVECTOR vlch);
+void init_XYZ_transform(cxMtx* pRGB2XYZ, cxMtx* pXYZ2RGB, cxVec* pPrims = nullptr, cxVec* pWhite = nullptr);
 
 } // nxColor
 
@@ -852,6 +878,7 @@ inline float signed_tri_area_2d(float ax, float ay, float bx, float by, float cx
 }
 
 bool seg_seg_overlap_2d(float s0x0, float s0y0, float s0x1, float s0y1, float s1x0, float s1y0, float s1x1, float s1y1);
+bool seg_plane_intersect(const cxVec& p0, const cxVec& p1, const cxPlane& pln, float* pT = nullptr);
 bool seg_quad_intersect_cw(const cxVec& p0, const cxVec& p1, const cxVec& v0, const cxVec& v1, const cxVec& v2, const cxVec& v3, cxVec* pHitPos = nullptr, cxVec* pHitNrm = nullptr);
 bool seg_quad_intersect_cw_n(const cxVec& p0, const cxVec& p1, const cxVec& v0, const cxVec& v1, const cxVec& v2, const cxVec& v3, const cxVec& nrm, cxVec* pHitPos = nullptr);
 bool seg_quad_intersect_ccw(const cxVec& p0, const cxVec& p1, const cxVec& v0, const cxVec& v1, const cxVec& v2, const cxVec& v3, cxVec* pHitPos = nullptr, cxVec* pHitNrm = nullptr);
@@ -994,6 +1021,7 @@ public:
 	float signed_dist(const cxVec& pos) const { return pos.dot(get_normal()) - get_D(); }
 	float dist(const cxVec& pos) const { return ::fabsf(signed_dist(pos)); }
 	bool pnt_in_front(const cxVec& pos) const { return signed_dist(pos) >= 0.0f; }
+	bool seg_intersect(const cxVec& p0, const cxVec& p1, float* pT = nullptr) const { return nxGeom::seg_plane_intersect(p0, p1, *this, pT); }
 };
 
 class cxSphere {
@@ -1072,6 +1100,8 @@ public:
 	bool overlaps(const cxSphere& sph) const { return sph.overlaps(*this); }
 	bool overlaps(const cxAABB& box) const { return nxGeom::aabb_aabb_overlap(mMin, mMax, box.mMin, box.mMax); }
 	bool overlaps(const cxCapsule& cap) const;
+
+	void get_polyhedron(cxPlane* pPln) const;
 };
 
 class cxCapsule {
@@ -1118,6 +1148,12 @@ public:
 	void init(const cxMtx& mtx, float fovy, float aspect, float znear, float zfar);
 
 	cxVec get_center() const;
+	cxPlane get_near_plane() const { return mPlane[0]; }
+	cxPlane get_far_plane() const { return mPlane[5]; }
+	cxPlane get_left_plane() const { return mPlane[1]; }
+	cxPlane get_right_plane() const { return mPlane[3]; }
+	cxPlane get_top_plane() const { return mPlane[2]; }
+	cxPlane get_bottom_plane() const { return mPlane[4]; }
 
 	bool cull(const cxSphere& sph) const;
 	bool overlaps(const cxSphere& sph) const;

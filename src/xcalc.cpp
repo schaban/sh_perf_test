@@ -848,13 +848,13 @@ XMGLOBALCONST XMVECTORF32 g_luma601 = { 0.299f, 0.587f, 0.114f, 0.0f };
 XMGLOBALCONST XMVECTORF32 g_luma709 = { 0.2126f, 0.7152f, 0.0722f, 0.0f };
 XMGLOBALCONST XMVECTORF32 g_Y709 = { 0.212671f, 0.71516f, 0.072169f, 0.0f };
 
-float luma(XMVECTOR xrgb) { return nxVec::dot4(xrgb, nxColor::g_luma601); }
-float luma_hd(XMVECTOR xrgb) { return nxVec::dot4(xrgb, nxColor::g_luma709); }
-float luminance(XMVECTOR xrgb) { return nxVec::dot4(xrgb, nxColor::g_Y709); }
+float luma(XMVECTOR vrgb) { return nxVec::dot4(vrgb, nxColor::g_luma601); }
+float luma_hd(XMVECTOR vrgb) { return nxVec::dot4(vrgb, nxColor::g_luma709); }
+float luminance(XMVECTOR vrgb) { return nxVec::dot4(vrgb, nxColor::g_Y709); }
 
-XMVECTOR RGB_to_YCgCo(XMVECTOR xrgb) {
+XMVECTOR RGB_to_YCgCo(XMVECTOR vrgb) {
 #if 0
-	cxVec rgb(xrgb);
+	cxVec rgb(vrgb);
 	return XMVectorSet(
 		rgb.dot(cxVec(0.25f, 0.5f, 0.25f)),
 		rgb.dot(cxVec(-0.25f, 0.5f, -0.25f)),
@@ -862,7 +862,7 @@ XMVECTOR RGB_to_YCgCo(XMVECTOR xrgb) {
 		0.0f
 	);
 #else
-	XMVECTOR hc = xrgb * 0.5f;
+	XMVECTOR hc = vrgb * 0.5f;
 	float hr = XMVectorGetX(hc);
 	float hg = XMVectorGetY(hc);
 	float hb = XMVectorGetZ(hc);
@@ -872,9 +872,9 @@ XMVECTOR RGB_to_YCgCo(XMVECTOR xrgb) {
 #endif
 }
 
-XMVECTOR YCgCo_to_RGB(XMVECTOR xygo) {
+XMVECTOR YCgCo_to_RGB(XMVECTOR vygo) {
 #if 0
-	cxVec ygo(xygo);
+	cxVec ygo(vygo);
 	return XMVectorSet(
 		ygo.dot(cxVec(1.0f, -1.0f, 1.0f)),
 		ygo.dot(cxVec(1.0f, 1.0f, 0.0f)),
@@ -882,12 +882,163 @@ XMVECTOR YCgCo_to_RGB(XMVECTOR xygo) {
 		1.0f
 	);
 #else
-	float y = XMVectorGetX(xygo);
-	float g = XMVectorGetY(xygo);
-	float o = XMVectorGetZ(xygo);
+	float y = XMVectorGetX(vygo);
+	float g = XMVectorGetY(vygo);
+	float o = XMVectorGetZ(vygo);
 	float t = y - g;
 	return XMVectorSet(t + o, y + g, t - o, 1.0f);
 #endif
+}
+
+XMVECTOR RGB_to_TMI(XMVECTOR vrgb) {
+	float r = XMVectorGetX(vrgb);
+	float g = XMVectorGetY(vrgb);
+	float b = XMVectorGetZ(vrgb);
+	float t = b - r;
+	float m = (r - g*2.0f + b) * 0.5f;
+	float i = (r + g + b) / 3.0f;
+	return XMVectorSet(t, m, i, 0.0f);
+}
+
+XMVECTOR TMI_to_RGB(XMVECTOR vtmi) {
+	float t = XMVectorGetX(vtmi);
+	float m = XMVectorGetY(vtmi);
+	float i = XMVectorGetZ(vtmi);
+	float r = i - t*0.5f + m/3.0f;
+	float g = i - m*2.0f/3.0f;
+	float b = i + t*0.5f + m/3.0f;
+	return XMVectorSet(r, g, b, 1.0f);
+}
+
+static XMMATRIX s_tm709 = {
+	{0.412453f, 0.212671f, 0.019334f, 0.0f},
+	{0.357580f, 0.715160f, 0.119193f, 0.0f},
+	{0.180423f, 0.072169f, 0.950227f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 1.0f}
+};
+
+static XMMATRIX s_im709 = {
+	{ 3.240479f, -0.969256f,  0.055648f, 0.0f},
+	{-1.537150f,  1.875992f, -0.204043f, 0.0f},
+	{-0.498535f,  0.041556f,  1.057311f, 0.0f},
+	{0.0f, 0.0f, 0.0f, 1.0f}
+};
+
+static inline cxMtx* mtx_RGB2XYZ(cxMtx* pRGB2XYZ) {
+	if (!pRGB2XYZ) {
+		pRGB2XYZ = (cxMtx*)&s_tm709;
+	}
+	return pRGB2XYZ;
+}
+
+static inline cxMtx* mtx_XYZ2RGB(cxMtx* pXYZ2RGB) {
+	if (!pXYZ2RGB) {
+		pXYZ2RGB = (cxMtx*)&s_im709;
+	}
+	return pXYZ2RGB;
+}
+
+XMVECTOR RGB_to_XYZ(XMVECTOR vrgb, cxMtx* pRGB2XYZ) {
+	pRGB2XYZ = mtx_RGB2XYZ(pRGB2XYZ);
+	return pRGB2XYZ->calc_vec(vrgb).get_xv();
+}
+
+XMVECTOR XYZ_to_RGB(XMVECTOR vxyz, cxMtx* pXYZ2RGB) {
+	pXYZ2RGB = mtx_XYZ2RGB(pXYZ2RGB);
+	return pXYZ2RGB->calc_vec(vxyz).get_xv_pnt(); /* A = 1 */
+}
+
+XMVECTOR XYZ_to_Lab(XMVECTOR vxyz, cxMtx* pRGB2XYZ) {
+	pRGB2XYZ = mtx_RGB2XYZ(pRGB2XYZ);
+	XMVECTOR white = RGB_to_XYZ(XMVectorReplicate(1.0f), pRGB2XYZ);
+	XMVECTOR lv = vxyz * nxVec::rcp0(white);
+	XMVECTOR t0 = lv*XMVectorReplicate(7.787f) + XMVectorReplicate(16.0f / 116);
+	XMVECTOR t1 = nxVec::cb_root(lv);
+	XMVECTOR m = _mm_cmple_ps(lv, XMVectorReplicate(0.008856f));
+	lv = _mm_or_ps(_mm_and_ps(m, t0), _mm_andnot_ps(m, t1));
+	float lx = XMVectorGetX(lv);
+	float ly = XMVectorGetY(lv);
+	float lz = XMVectorGetZ(lv);
+	return XMVectorSet(116.0f*ly - 16.0f, 500.0f*(lx-ly), 200.0f*(ly-lz), 0.0f);
+}
+
+XMVECTOR Lab_to_XYZ(XMVECTOR vlab, cxMtx* pRGB2XYZ) {
+	pRGB2XYZ = mtx_RGB2XYZ(pRGB2XYZ);
+	XMVECTOR white = RGB_to_XYZ(XMVectorReplicate(1.0f), pRGB2XYZ);
+	float L = XMVectorGetX(vlab);
+	float a = XMVectorGetY(vlab);
+	float b = XMVectorGetZ(vlab);
+	float ly = (L + 16.0f) / 116.0f;
+	XMVECTOR t = XMVectorSet(a/500.0f + ly, ly, -b/200.0f + ly, 0.0f);
+	XMVECTOR t0 = (t - XMVectorReplicate(16.0f/116)) / XMVectorReplicate(7.787f);
+	XMVECTOR t1 = t*t*t;
+	XMVECTOR m = _mm_cmple_ps(t, XMVectorReplicate(0.206893f));
+	t = _mm_or_ps(_mm_and_ps(m, t0), _mm_andnot_ps(m, t1));
+	return t*white;
+}
+
+XMVECTOR RGB_to_Lab(XMVECTOR vrgb, cxMtx* pRGB2XYZ) {
+	return XYZ_to_Lab(RGB_to_XYZ(vrgb, pRGB2XYZ), pRGB2XYZ);
+}
+
+XMVECTOR Lab_to_RGB(XMVECTOR vlab, cxMtx* pRGB2XYZ, cxMtx* pXYZ2RGB) {
+	return XYZ_to_RGB(Lab_to_XYZ(vlab, pRGB2XYZ), pXYZ2RGB);
+}
+
+XMVECTOR Lab_to_Lch(XMVECTOR vlab) {
+	float L = XMVectorGetX(vlab);
+	float a = XMVectorGetY(vlab);
+	float b = XMVectorGetZ(vlab);
+	float c = nxCalc::hypot(a, b);
+	float h = ::atan2f(b, a);
+	return XMVectorSet(L, c, h, 0.0f);
+}
+
+XMVECTOR Lch_to_Lab(XMVECTOR vlch) {
+	float L = XMVectorGetX(vlch);
+	float c = XMVectorGetY(vlch);
+	float h = XMVectorGetZ(vlch);
+	float hs = ::sinf(h);
+	float hc = ::cosf(h);
+	return XMVectorSet(L, c*hc, c*hs, 0.0f);
+}
+
+void init_XYZ_transform(cxMtx* pRGB2XYZ, cxMtx* pXYZ2RGB, cxVec* pPrims, cxVec* pWhite) {
+	cxVec rx, ry, rz;
+	if (pPrims) {
+		rx = pPrims[0];
+		ry = pPrims[1];
+		rz = pPrims[2];
+	} else {
+		/* 709 primaries */
+		rx.set(0.640f, 0.330f, 0.030f);
+		ry.set(0.300f, 0.600f, 0.100f);
+		rz.set(0.150f, 0.060f, 0.790f);
+	}
+
+	cxVec w;
+	if (pWhite) {
+		w = *pWhite;
+	} else {
+		/* D65 */
+		w.set(0.3127f, 0.3290f, 0.3582f);
+	}
+	w.scl(nxCalc::rcp0(w.y));
+
+	cxMtx cm;
+	cm.set_rot_frame(rx, ry, rz);
+
+	cxMtx im = cm.get_inverted();
+	cxVec j = im.calc_vec(w);
+	cxMtx tm;
+	tm.mk_scl(j);
+	tm.mul(cm);
+	if (pRGB2XYZ) {
+		*pRGB2XYZ = tm;
+	}
+	if (pXYZ2RGB) {
+		*pXYZ2RGB = tm.get_inverted();
+	}
 }
 
 } // nxColor
@@ -923,6 +1074,14 @@ XMVECTOR cxColor::to_YCgCo() const {
 
 void cxColor::from_YCgCo(XMVECTOR ygo) {
 	mRGBA = nxColor::YCgCo_to_RGB(ygo);
+}
+
+XMVECTOR cxColor::to_TMI() const {
+	return nxColor::RGB_to_TMI(mRGBA);
+}
+
+void cxColor::from_TMI(XMVECTOR tmi) {
+	mRGBA = nxColor::TMI_to_RGB(tmi);
 }
 
 
@@ -963,6 +1122,18 @@ bool seg_seg_overlap_2d(float s0x0, float s0y0, float s0x1, float s0y1, float s1
 		if (a3*a4 < 0.0f) {
 			res = true;
 		}
+	}
+	return res;
+}
+
+bool seg_plane_intersect(const cxVec& p0, const cxVec& p1, const cxPlane& pln, float* pT) {
+	cxVec d = p1 - p0;
+	cxVec n = pln.get_normal();
+	float dn = d.dot(n);
+	float t = (pln.get_D() - n.dot(p0)) / dn;
+	bool res = t >= 0.0f && t <= 1.0f;
+	if (res && pT) {
+		*pT = t;
 	}
 	return res;
 }
@@ -1044,7 +1215,7 @@ bool seg_quad_intersect_ccw_n(const cxVec& p0, const cxVec& p1, const cxVec& v0,
 	}
 	return true;
 }
-	
+
 bool seg_polyhedron_intersect(const cxVec& p0, const cxVec& p1, const cxPlane* pPln, int plnNum, float* pFirst, float* pLast) {
 	float first = 0.0f;
 	float last = 1.0f;
@@ -1498,6 +1669,18 @@ bool cxCapsule::overlaps(const cxAABB& box) const {
 
 bool cxCapsule::overlaps(const cxCapsule& cap) const {
 	return nxGeom::cap_cap_overlap(mPos0, mPos1, mRadius, cap.mPos0, cap.mPos1, cap.mRadius);
+}
+
+void cxAABB::get_polyhedron(cxPlane* pPln) const {
+	if (!pPln) return;
+	cxVec vmin = get_min_pos();
+	cxVec vmax = get_max_pos();
+	pPln[0].calc(vmin, nxVec::get_axis(exAxis::MINUS_Y)); /* bottom */
+	pPln[1].calc(vmax, nxVec::get_axis(exAxis::PLUS_Y)); /* top */
+	pPln[2].calc(vmin, nxVec::get_axis(exAxis::MINUS_X)); /* left */
+	pPln[3].calc(vmax, nxVec::get_axis(exAxis::PLUS_X)); /* right */
+	pPln[4].calc(vmin, nxVec::get_axis(exAxis::MINUS_Z)); /* far */
+	pPln[5].calc(vmax, nxVec::get_axis(exAxis::PLUS_Z)); /* near */
 }
 
 
