@@ -618,7 +618,7 @@ public:
 
 	bool is_valid_rot(float tol = 1.0e-3f) const;
 	cxVec get_rot(exRotOrd ord = exRotOrd::XYZ) const;
-	cxVec get_rot_deg(exRotOrd ord = exRotOrd::XYZ) const { return get_rot(ord) * XD_RAD2DEG(1.0f); }
+	cxVec get_rot_degrees(exRotOrd ord = exRotOrd::XYZ) const { return get_rot(ord) * XD_RAD2DEG(1.0f); }
 
 	void mk_scl(float sx, float sy, float sz) { xset(XMMatrixScaling(sx, sy, sz)); }
 	void mk_scl(const cxVec& sv) { mk_scl(sv.x, sv.y, sv.z); }
@@ -675,6 +675,10 @@ public:
 	void set_w(float w) { set_at(3, w); }
 	XMVECTOR get_xv() const { return xload(); }
 	void set_xv(XMVECTOR xv) { xstore(xv); }
+
+	cxVec get_axis_x() const { return cxVec(1.0f - (2.0f*y*y) - (2.0f*z*z), (2.0f*x*y) + (2.0f*w*z), (2.0f*x*z) - (2.0f*w*y)); }
+	cxVec get_axis_y() const { return cxVec((2.0f*x*y) - (2.0f*w*z), 1.0f - (2.0f*x*x) - (2.0f*z*z), (2.0f*y*z) + (2.0f*w*x)); }
+	cxVec get_axis_z() const { return cxVec((2.0f*x*z) + (2.0f*w*y), (2.0f*y*z) - (2.0f*w*x), 1.0f - (2.0f*x*x) - (2.0f*y*y)); }
 
 	void from_mtx(const cxMtx& m);
 	cxMtx to_mtx() const;
@@ -733,6 +737,9 @@ public:
 	void set_rot(float rx, float ry, float rz, exRotOrd ord = exRotOrd::XYZ);
 	void set_rot_degrees(const cxVec& r, exRotOrd ord = exRotOrd::XYZ);
 
+	cxVec get_rot(exRotOrd ord = exRotOrd::XYZ) const;
+	cxVec get_rot_degrees(exRotOrd ord = exRotOrd::XYZ) const { return get_rot(ord) * XD_RAD2DEG(1.0f); }
+
 	cxQuat get_closest_x() const;
 	cxQuat get_closest_y() const;
 	cxQuat get_closest_z() const;
@@ -783,6 +790,8 @@ public:
 	void set(float r, float g, float b, float a = 1.0f) { mRGBA = XMVectorSet(r, g, b, a); }
 	void set(float val) { set(val, val, val); }
 
+	void zero() { mRGBA = XMVectorZero(); }
+
 	float get_r() const { return XMVectorGetByIndex(mRGBA, 0); }
 	float get_g() const { return XMVectorGetByIndex(mRGBA, 1); }
 	float get_b() const { return XMVectorGetByIndex(mRGBA, 2); }
@@ -796,6 +805,8 @@ public:
 	float luma() const;
 	float luminance() const;
 
+	void scl(float s) { mRGBA *= s; }
+
 	void scl_rgb(float s) {
 		r *= s;
 		g *= s;
@@ -806,6 +817,14 @@ public:
 		r *= sr;
 		g *= sg;
 		b *= sb;
+	}
+
+	void add(const cxColor& c) { mRGBA += c.mRGBA; }
+
+	void add_rgb(const cxColor& c) {
+		r += c.r;
+		g += c.g;
+		b += c.b;
 	}
 
 	void make_linear();
@@ -1061,6 +1080,11 @@ public:
 	void init() {
 		mMin.fill(FLT_MAX);
 		mMax.fill(-FLT_MAX);
+	}
+
+	void set(const cxVec& pnt) {
+		mMin = pnt;
+		mMax = pnt;
 	}
 
 	void set(const cxVec& p0, const cxVec& p1) {

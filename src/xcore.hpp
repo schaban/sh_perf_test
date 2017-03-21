@@ -399,6 +399,10 @@ inline uint32_t pop_count32(uint32_t x) {
 #endif
 }
 
+inline bool is_pow2(uint32_t val) {
+	return (val & (val - 1)) == 0;
+}
+
 float f32_set_bits(uint32_t x);
 uint32_t f32_get_bits(float x);
 inline uint32_t f32_get_exp_bits(float x) { return (f32_get_bits(x) >> 23) & 0xFF; }

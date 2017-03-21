@@ -433,6 +433,15 @@ static inline float limit_pi(float rad) {
 	return rad;
 }
 
+static struct { uint8_t i0, i1, i2, s; } s_getRotTbl[] = {
+	/* XYZ */ { 0, 1, 2, 1 },
+	/* XZY */ { 0, 2, 1, 0 },
+	/* YXZ */ { 1, 0, 2, 0 },
+	/* YZX */ { 1, 2, 0, 1 },
+	/* ZXY */ { 2, 0, 1, 1 },
+	/* ZYX */ { 2, 1, 0, 0 }
+};
+
 cxVec cxMtx::get_rot(exRotOrd ord) const {
 	cxVec rv(0.0f);
 	cxQuat q = to_quat();
@@ -442,14 +451,20 @@ cxVec cxMtx::get_rot(exRotOrd ord) const {
 	switch (axisMask) {
 		case 6: /* 0110 -> X */
 			rv.x = ::acosf(qw) * 2.0f;
+			if (q.x < 0.0f) rv.x = -rv.x;
+			rv.x = limit_pi(rv.x);
 			singleAxis = true;
 			break;
 		case 5: /* 0101 -> Y */
 			rv.y = ::acosf(qw) * 2.0f;
+			if (q.y < 0.0f) rv.y = -rv.y;
+			rv.y = limit_pi(rv.y);
 			singleAxis = true;
 			break;
 		case 3: /* 0011 -> Z */
 			rv.z = ::acosf(qw) * 2.0f;
+			if (q.z < 0.0f) rv.z = -rv.z;
+			rv.z = limit_pi(rv.z);
 			singleAxis = true;
 			break;
 		case 7: /* 0111 -> identity */
@@ -459,21 +474,13 @@ cxVec cxMtx::get_rot(exRotOrd ord) const {
 	if (singleAxis) {
 		return rv;
 	}
-	static struct { uint8_t i0, i1, i2, s; } tbl[] = {
-		/* XYZ */ { 0, 1, 2, 1 },
-		/* XZY */ { 0, 2, 1, 0 },
-		/* YXZ */ { 1, 0, 2, 0 },
-		/* YZX */ { 1, 2, 0, 1 },
-		/* ZXY */ { 2, 0, 1, 1 },
-		/* ZYX */ { 2, 1, 0, 0 }
-	};
-	if ((uint32_t)ord >= sizeof(tbl) / sizeof(tbl[0])) {
+	if ((uint32_t)ord >= sizeof(s_getRotTbl) / sizeof(s_getRotTbl[0])) {
 		ord = exRotOrd::XYZ;
 	}
-	int i0 = tbl[(int)ord].i0;
-	int i1 = tbl[(int)ord].i1;
-	int i2 = tbl[(int)ord].i2;
-	float sgn = tbl[(int)ord].s ? 1.0f : -1.0f;
+	int i0 = s_getRotTbl[(int)ord].i0;
+	int i1 = s_getRotTbl[(int)ord].i1;
+	int i2 = s_getRotTbl[(int)ord].i2;
+	float sgn = s_getRotTbl[(int)ord].s ? 1.0f : -1.0f;
 	cxVec rm[3];
 	rm[0].set(get_at(i0, i0), get_at(i0, i1), get_at(i0, i2));
 	rm[1].set(get_at(i1, i0), get_at(i1, i1), get_at(i1, i2));
@@ -745,6 +752,73 @@ void cxQuat::set_rot(float rx, float ry, float rz, exRotOrd ord) {
 void cxQuat::set_rot_degrees(const cxVec& r, exRotOrd ord) {
 	cxVec rr = r * XD_DEG2RAD(1.0f);
 	set_rot(rr.x, rr.y, rr.z, ord);
+}
+
+cxVec cxQuat::get_rot(exRotOrd ord) const {
+	cxVec rv(0.0f);
+	int axisMask = 0;
+	const float eps = 1.0e-6f;
+	if (::fabsf(x) < eps) axisMask |= 1;
+	if (::fabsf(y) < eps) axisMask |= 2;
+	if (::fabsf(z) < eps) axisMask |= 4;
+	if (::fabsf(w) < eps) axisMask |= 8;
+	bool singleAxis = false;
+	float qw = nxCalc::clamp(w, -1.0f, 1.0f);
+	switch (axisMask) {
+		case 6: /* 0110 -> X */
+			rv.x = ::acosf(qw) * 2.0f;
+			if (x < 0.0f) rv.x = -rv.x;
+			rv.x = limit_pi(rv.x);
+			singleAxis = true;
+			break;
+		case 5: /* 0101 -> Y */
+			rv.y = ::acosf(qw) * 2.0f;
+			if (y < 0.0f) rv.y = -rv.y;
+			rv.y = limit_pi(rv.y);
+			singleAxis = true;
+			break;
+		case 3: /* 0011 -> Z */
+			rv.z = ::acosf(qw) * 2.0f;
+			if (z < 0.0f) rv.z = -rv.z;
+			rv.z = limit_pi(rv.z);
+			singleAxis = true;
+			break;
+		case 7: /* 0111 -> identity */
+			singleAxis = true;
+			break;
+	}
+	if (singleAxis) {
+		return rv;
+	}
+	if ((uint32_t)ord >= sizeof(s_getRotTbl) / sizeof(s_getRotTbl[0])) {
+		ord = exRotOrd::XYZ;
+	}
+	int i0 = s_getRotTbl[(int)ord].i0;
+	int i1 = s_getRotTbl[(int)ord].i1;
+	int i2 = s_getRotTbl[(int)ord].i2;
+	float sgn = s_getRotTbl[(int)ord].s ? 1.0f : -1.0f;
+	cxVec m[3];
+	m[0] = get_axis_x();
+	m[1] = get_axis_y();
+	m[2] = get_axis_z();
+	cxVec rm[3];
+	rm[0].set(m[i0][i0], m[i0][i1], m[i0][i2]);
+	rm[1].set(m[i1][i0], m[i1][i1], m[i1][i2]);
+	rm[2].set(m[i2][i0], m[i2][i1], m[i2][i2]);
+	float r[3] = { 0, 0, 0 };
+	r[i0] = ::atan2f(rm[1][2], rm[2][2]);
+	r[i1] = ::atan2f(-rm[0][2], ::sqrtf(nxCalc::sq(rm[0][0]) + nxCalc::sq(rm[0][1])));
+	float s = ::sinf(r[i0]);
+	float c = ::cosf(r[i0]);
+	r[i2] = ::atan2f(s*rm[2][0] - c*rm[1][0], c*rm[1][1] - s*rm[2][1]);
+	for (int i = 0; i < 3; ++i) {
+		r[i] *= sgn;
+	}
+	for (int i = 0; i < 3; ++i) {
+		r[i] = limit_pi(r[i]);
+	}
+	rv.from_mem(r);
+	return rv;
 }
 
 // http://www.geometrictools.com/Documentation/ConstrainedQuaternions.pdf

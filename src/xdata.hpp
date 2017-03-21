@@ -60,6 +60,8 @@ struct sxData {
 	int find_str(const char* pStr) const { return pStr && mOffsStr ? get_str_list()->find_str(pStr) : -1; }
 	bool has_file_path() const { return !!mFilePathLen; }
 	const char* get_file_path() const { return has_file_path() ? (const char*)XD_INCR_PTR(this, mFileSize) : nullptr; }
+	const char* get_name() const { return get_str(mNameId); }
+	const char* get_base_path() const { return get_str(mPathId); }
 
 	template<typename T> bool is() const { return mKind == T::KIND; }
 	template<typename T> T* as() const { return is<T>() ? (T*)this : nullptr; }
@@ -134,6 +136,11 @@ struct sxValuesData : public sxData {
 		xt_float3 get_val_f3(int idx) const;
 		xt_float4 get_val_f4(int idx) const;
 		const char* get_val_s(int idx) const;
+		float get_float(const char* pName, const float defVal = 0.0f) const;
+		int get_int(const char* pName, const int defVal = 0) const;
+		cxVec get_vec(const char* pName, const cxVec& defVal = cxVec(0.0f)) const;
+		cxColor get_rgb(const char* pName, const cxColor& defVal = cxColor(0.0f)) const;
+		const char* get_str(const char* pName, const char* pDefVal = "") const;
 	};
 
 	bool ck_grp_idx(int idx) const { return (uint32_t)idx < (uint32_t)get_grp_num(); }
@@ -143,6 +150,7 @@ struct sxValuesData : public sxData {
 	int get_grp_num() const { GrpList* pGrpLst = get_grp_list(); return pGrpLst ? pGrpLst->mNum : 0; };
 	GrpInfo* get_grp_info(int idx) const { return ck_grp_idx(idx) ? reinterpret_cast<GrpInfo*>(XD_INCR_PTR(this, get_grp_list()->mOffs[idx])) : nullptr; }
 	Group get_grp(int idx) const;
+	Group find_grp(const char* pName, const char* pPath = nullptr) const { return get_grp(find_grp_idx(pName, pPath)); }
 
 	static const char* get_val_type_str(eValType typ);
 
@@ -354,6 +362,9 @@ struct sxGeometryData : public sxData {
 		int get_rel_idx(int at) const;
 		int get_idx(int at) const;
 		bool contains(int idx) const;
+		int get_skin_nodes_num() const { return is_valid() ? mpInfo->mSkinNodeNum : 0; }
+		cxSphere* get_skin_spheres() const;
+		uint16_t* get_skin_ids() const;
 	};
 
 	class HitFunc {
@@ -394,6 +405,7 @@ struct sxGeometryData : public sxData {
 	bool is_same_pol_size() const { return !!(mFlags & 1); }
 	bool is_same_pol_mtl() const { return !!(mFlags & 2); }
 	bool has_skin_spheres() const { return !!(mFlags & 4); }
+	bool all_quads_planar_convex() const { return !!(mFlags & 8); }
 	bool is_all_tris() const { return is_same_pol_size() && mMaxVtxPerPol == 3; }
 	bool has_skin() const { return mSkinOffs != 0; }
 	bool has_skin_nodes() const { return mSkinNodesOffs != 0; }
@@ -411,6 +423,7 @@ struct sxGeometryData : public sxData {
 	Polygon get_pol(int idx) const;
 	cxSphere* get_skin_sph_top() const { return mSkinNodesOffs ? reinterpret_cast<cxSphere*>(XD_INCR_PTR(this, mSkinNodesOffs)) : nullptr; }
 	int get_skin_nodes_num() const { return mSkinNodeNum; }
+	int32_t* get_skin_node_name_ids() const;
 	const char* get_skin_node_name(int idx) const;
 	int find_skin_node(const char* pName) const;
 	uint32_t get_attr_info_offs(eAttrClass cls) const;
@@ -436,6 +449,7 @@ struct sxGeometryData : public sxData {
 	cxVec calc_pnt_bitangent(int pntIdx) const;
 	cxColor get_pnt_color(int pntIdx) const;
 	xt_texcoord get_pnt_texcoord(int pntIdx) const;
+	xt_texcoord get_pnt_texcoord2(int pntIdx) const;
 	int get_pnt_wgt_num(int pntIdx) const;
 	int get_pnt_skin_jnt(int pntIdx, int wgtIdx) const;
 	float get_pnt_skin_wgt(int pntIdx, int wgtIdx) const;
@@ -443,9 +457,9 @@ struct sxGeometryData : public sxData {
 	Group find_mtl_grp(const char* pName, const char* pPath = nullptr) const { return get_mtl_grp(find_mtl_grp_idx(pName, pPath)); }
 	GrpInfo* get_mtl_info(int idx) const;
 	Group get_mtl_grp(int idx) const;
-	GrpInfo* sxGeometryData::get_pnt_grp_info(int idx) const;
+	GrpInfo* get_pnt_grp_info(int idx) const;
 	Group get_pnt_grp(int idx) const;
-	GrpInfo* sxGeometryData::get_pol_grp_info(int idx) const;
+	GrpInfo* get_pol_grp_info(int idx) const;
 	Group get_pol_grp(int idx) const;
 	void hit_query_nobvh(const cxLineSeg& seg, HitFunc& fun) const;
 	void hit_query(const cxLineSeg& seg, HitFunc& fun) const;
@@ -538,6 +552,18 @@ struct sxTextureData : public sxData {
 		void save(const char* pOutPath) const;
 	};
 
+	struct Pyramid {
+		int32_t mBaseWidth;
+		int32_t mBaseHeight;
+		int32_t mLvlNum;
+		int32_t mLvlOffs[1];
+
+		bool ck_lvl_idx(int idx) const { return (uint32_t)idx < (uint32_t)mLvlNum; }
+		cxColor* get_lvl(int idx) const { return ck_lvl_idx(idx) ? reinterpret_cast<cxColor*>(XD_INCR_PTR(this, mLvlOffs[idx])) : nullptr; }
+		void get_lvl_dims(int idx, int* pWidth, int* pHeight) const;
+		DDS get_lvl_dds(int idx) const;
+	};
+
 	bool ck_plane_idx(int idx) const { return (uint32_t)idx < mPlaneNum; }
 	int get_width() const { return mWidth; }
 	int get_height() const { return mHeight; }
@@ -549,6 +575,7 @@ struct sxTextureData : public sxData {
 	void get_rgba(float* pDst, bool cvtToSRGB = false) const;
 	cxColor* get_rgba(bool cvtToSRGB = false) const;
 	DDS get_dds(bool cvtToSRGB = false) const;
+	Pyramid* get_pyramid() const;
 
 	static const uint32_t KIND = XD_FOURCC('X', 'T', 'E', 'X');
 };
@@ -840,6 +867,10 @@ namespace nxDataUtil {
 
 exAnimChan anim_chan_from_str(const char* pStr);
 const char* anim_chan_to_str(exAnimChan chan);
+exRotOrd rot_ord_from_str(const char* pStr);
+const char* rot_ord_to_str(exRotOrd rord);
+exTransformOrd xform_ord_from_str(const char* pStr);
+const char* xform_ord_to_str(exTransformOrd xord);
 
 float* alloc_sh_coefs_f32(int order);
 double* alloc_sh_coefs_f64(int order);

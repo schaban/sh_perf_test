@@ -259,7 +259,7 @@ uint32_t fetch_bits32(uint8_t* pTop, uint32_t org, uint32_t len) {
 	tmp = _mm_or_si128(tmp, _mm_sll_epi64(_mm_cvtsi32_si128(pTop[idx + 4]), _mm_cvtsi32_si128(8 * 4)));
 	tmp = _mm_srl_epi64(tmp, _mm_cvtsi32_si128(org & 7));
 	res = _mm_cvtsi128_si32(tmp);
-	return res & ((1 << len) - 1);
+	return res & (0xFFFFFFFFU >> (32-len));
 }
 
 uint32_t fetch_bits32_loop(uint8_t* pTop, uint32_t org, uint32_t len) {
@@ -276,7 +276,7 @@ uint32_t fetch_bits32_loop(uint8_t* pTop, uint32_t org, uint32_t len) {
 	}
 	tmp = _mm_srl_epi64(tmp, _mm_cvtsi32_si128(org & 7));
 	res = _mm_cvtsi128_si32(tmp);
-	return res & ((1 << len) - 1);
+	return res & (0xFFFFFFFFU >> (32 - len));
 }
 
 static void d3d11_init() {
@@ -543,6 +543,7 @@ IDXGISwapChain* sxGfxDevice::create_swap_chain(DXGI_SWAP_CHAIN_DESC& desc) const
 						nxCore::dbg_msg("Can't create swap chain.\n");
 						pSwp = nullptr;
 					}
+					pFct->Release();
 				}
 				pAdapter->Release();
 			}

@@ -268,14 +268,16 @@ def getMaxFrame():
 
 def getRotOrd(node):
 	rOrd = "xyz"
-	rOrdParm = node.parm("rOrd")
-	if rOrdParm: rOrd = rOrdParm.evalAsString()
+	if node:
+		rOrdParm = node.parm("rOrd")
+		if rOrdParm: rOrd = rOrdParm.evalAsString()
 	return rOrd
 
 def getXformOrd(node):
 	xOrd = "srt"
-	xOrdParm = node.parm("xOrd")
-	if xOrdParm: xOrd = xOrdParm.evalAsString()
+	if node:
+		xOrdParm = node.parm("xOrd")
+		if xOrdParm: xOrd = xOrdParm.evalAsString()
 	return xOrd
 
 def evalFrmRot(node, fno):
@@ -298,6 +300,13 @@ def getParamKeys(prm):
 	else: kf = prm.keyframes()
 	return kf
 
+def getParamKeysInRange(prm, start, end):
+	kf = None
+	trk = prm.overrideTrack()
+	if trk: kf = prm.getReferencedParm().keyframesInRange(start, end)
+	else: kf = prm.keyframesInRange(start, end)
+	return kf
+
 def ckParmsAnim(parms):
 	for prm in parms:
 		keys = getParamKeys(prm)
@@ -315,6 +324,13 @@ def hasPosAnim(node):
 def hasSclAnim(node):
 	parms = hou.parmTuple(node.path() + "/s")
 	return ckParmsAnim(parms)
+
+def setLinKey(prm, val, fno):
+	key = hou.Keyframe()
+	key.setExpression("linear()")
+	key.setFrame(fno)
+	key.setValue(val)
+	prm.setKeyframe(key)
 
 def mkNode(basePath, nodeType, nodeName):
 	node = hou.node(basePath + "/" + nodeName)
@@ -505,20 +521,36 @@ def getChannelsInGroup(grpName):
 	if len(lst): del lst[0] # remove group name from the list
 	return lst
 
+def isRotChannel(chPath):
+	return chPath.endswith("/rx") or chPath.endswith("/ry") or chPath.endswith("/rz")
+
+class FcvNameInfo:
+	def __init__(self, chName, nodeName, nodePath):
+		self.chName = chName
+		self.nodeName = nodeName
+		self.nodePath = nodePath
+
 class FCurve:
-	def __init__(self, chPath, minFrame, maxFrame):
+	def __init__(self, chPath, minFrame, maxFrame, nameInfo = None):
 		self.minFrame = int(minFrame)
 		self.maxFrame = int(maxFrame)
+		self.minVal = 0.0
+		self.maxVal = 0.0
 		self.slopesFlg = False
 		self.sameFuncFlg = False
 		self.cmnFunc = -1
 		self.prm = hou.parm(chPath)
-		self.chName = self.prm.name()
-		self.nodeName = self.prm.node().name()
-		self.nodePath = "/"
-		nodePath = self.prm.node().path()
-		sep = nodePath.rfind("/")
-		if sep >= 0: self.nodePath = nodePath[:sep]
+		if nameInfo:
+			self.chName = nameInfo.chName
+			self.nodeName = nameInfo.nodeName
+			self.nodePath = nameInfo.nodePath
+		else:
+			self.chName = self.prm.name()
+			self.nodeName = self.prm.node().name()
+			self.nodePath = "/"
+			nodePath = self.prm.node().path()
+			sep = nodePath.rfind("/")
+			if sep >= 0: self.nodePath = nodePath[:sep]
 		self.keys = getParamKeys(self.prm)
 		if not self.keys: return
 		baked = []

@@ -421,12 +421,14 @@ class GeoExporter(xd.BaseExporter):
 		self.pols = []
 		self.primTbl = []
 		self.maxVtxPerPol = 0
+		hasQuads = False
 		for prim in self.geo.prims():
 			if prim.type() == hou.primType.Polygon:
 				self.primTbl.append(len(self.pols))
 				pol = Polygon(self, prim)
 				self.maxVtxPerPol = max(pol.vtxNum, self.maxVtxPerPol)
 				self.pols.append(pol)
+				if pol.vtxNum == 4: hasQuads = True
 			else:
 				self.primTbl.append(-1)
 		self.polNum = len(self.pols)
@@ -438,6 +440,42 @@ class GeoExporter(xd.BaseExporter):
 				if pol.vtxNum != nvtx:
 					self.samePolSize = False
 					break
+
+		self.allQuadsPlanarConvex = False
+		if hasQuads:
+			planarEps = 1.0e-6
+			foundNonPlanar = False
+			foundNonCovex = False
+			for pol in self.pols:
+				if pol.vtxNum == 4:
+					polP0 = pol.prim.vertex(0).point().position()
+					polP1 = pol.prim.vertex(1).point().position()
+					polP2 = pol.prim.vertex(2).point().position()
+					polP3 = pol.prim.vertex(3).point().position()
+					polCen = (polP0 + polP1 + polP2 + polP3) / 4
+					polNrm = pol.prim.normal()
+					polD = polCen.dot(polNrm)
+					for vtx in pol.prim.vertices():
+						vtxPos = vtx.point().position()
+						vtxDist = abs(vtxPos.dot(polNrm) - polD)
+						if vtxDist > planarEps:
+							foundNonPlanar = True
+							break
+					if not foundNonPlanar:
+						polE0 = polP1 - polP0
+						polE1 = polP2 - polP1
+						polE2 = polP3 - polP2
+						polE3 = polP0 - polP3
+						cvxMask = 0
+						polN01 = polE0.cross(polE1)
+						polN23 = polE2.cross(polE3)
+						if polN01.dot(polN23) > 0: cvxMask |= 1
+						polN12 = polE1.cross(polE2)
+						polN30 = polE3.cross(polE0)
+						if polN12.dot(polN30) > 0: cvxMask |= 2
+						if cvxMask != 3: foundNonCovex = True
+				if foundNonPlanar or foundNonCovex: break
+			self.allQuadsPlanarConvex = not foundNonPlanar and not foundNonCovex
 
 		self.skinFlg = False
 		self.skinNodeNum = 0
@@ -788,6 +826,7 @@ class GeoExporter(xd.BaseExporter):
 		if self.samePolSize: self.flags |= 1
 		if self.samePolMtl: self.flags |= 2
 		if self.skinFlg and self.skinSphFlg: self.flags |= 4
+		if self.allQuadsPlanarConvex: self.flags |= 8
 		xd.BaseExporter.save(self, outPath)
 
 if __name__=="__main__":
@@ -805,5 +844,4 @@ if __name__=="__main__":
 	geo.build(sop)
 	print "Saving geometry to", outPath
 	geo.save(outPath)
-
 

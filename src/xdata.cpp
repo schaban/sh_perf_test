@@ -69,8 +69,85 @@ const char* anim_chan_to_str(exAnimChan chan) {
 		case exAnimChan::SX: pName = "sx"; break;
 		case exAnimChan::SY: pName = "sy"; break;
 		case exAnimChan::SZ: pName = "sz"; break;
+		default: break;
 	}
 	return pName;
+}
+
+exRotOrd rot_ord_from_str(const char* pStr) {
+	exRotOrd rord = exRotOrd::XYZ;
+	static struct {
+		const char* pName;
+		exRotOrd ord;
+	} tbl[] = {
+		{ "xyz", exRotOrd::XYZ },
+		{ "xzy", exRotOrd::XZY },
+		{ "yxz", exRotOrd::YXZ },
+		{ "yzx", exRotOrd::YZX },
+		{ "zxy", exRotOrd::ZXY },
+		{ "zyx", exRotOrd::ZYX }
+	};
+	if (pStr) {
+		for (int i = 0; i < XD_ARY_LEN(tbl); ++i) {
+			if (nxCore::str_eq(pStr, tbl[i].pName)) {
+				rord = tbl[i].ord;
+				break;
+			}
+		}
+	}
+	return rord;
+}
+
+const char* rot_ord_to_str(exRotOrd rord) {
+	const char* pStr = "xyz";
+	switch (rord) {
+		case exRotOrd::XYZ: pStr = "xyz"; break;
+		case exRotOrd::XZY: pStr = "xzy"; break;
+		case exRotOrd::YXZ: pStr = "yxz"; break;
+		case exRotOrd::YZX: pStr = "yzx"; break;
+		case exRotOrd::ZXY: pStr = "zxy"; break;
+		case exRotOrd::ZYX: pStr = "zyx"; break;
+		default: break;
+	}
+	return pStr;
+}
+
+exTransformOrd xform_ord_from_str(const char* pStr) {
+	exTransformOrd xord = exTransformOrd::SRT;
+	static struct {
+		const char* pName;
+		exTransformOrd ord;
+	} tbl[] = {
+		{ "srt", exTransformOrd::SRT },
+		{ "str", exTransformOrd::STR },
+		{ "rst", exTransformOrd::RST },
+		{ "rts", exTransformOrd::RTS },
+		{ "tsr", exTransformOrd::TSR },
+		{ "trs", exTransformOrd::TRS }
+	};
+	if (pStr) {
+		for (int i = 0; i < XD_ARY_LEN(tbl); ++i) {
+			if (nxCore::str_eq(pStr, tbl[i].pName)) {
+				xord = tbl[i].ord;
+				break;
+			}
+		}
+	}
+	return xord;
+}
+
+const char* xform_ord_to_str(exTransformOrd xord) {
+	const char* pStr = "srt";
+	switch (xord) {
+		case exTransformOrd::SRT: pStr = "srt"; break;
+		case exTransformOrd::STR: pStr = "str"; break;
+		case exTransformOrd::RST: pStr = "rst"; break;
+		case exTransformOrd::RTS: pStr = "rts"; break;
+		case exTransformOrd::TSR: pStr = "tsr"; break;
+		case exTransformOrd::TRS: pStr = "trs"; break;
+		default: break;
+	}
+	return pStr;
 }
 
 float* alloc_sh_coefs_f32(int order) {
@@ -318,6 +395,53 @@ const char* sxValuesData::Group::get_val_s(int idx) const {
 				pStr = pStrLst->get_str(pVal->mValId.i);
 			}
 		}
+	}
+	return pStr;
+}
+
+float sxValuesData::Group::get_float(const char* pName, const float defVal) const {
+	float f = defVal;
+	int idx = find_val_idx(pName);
+	if (idx >= 0) {
+		f = get_val_f(idx);
+	}
+	return f;
+}
+
+int sxValuesData::Group::get_int(const char* pName, const int defVal) const {
+	int i = defVal;
+	int idx = find_val_idx(pName);
+	if (idx >= 0) {
+		i = get_val_i(idx);
+	}
+	return i;
+}
+
+cxVec sxValuesData::Group::get_vec(const char* pName, const cxVec& defVal) const {
+	cxVec v = defVal;
+	int idx = find_val_idx(pName);
+	if (idx >= 0) {
+		xt_float3 f3 = get_val_f3(idx);
+		v.set(f3.x, f3.y, f3.z);
+	}
+	return v;
+}
+
+cxColor sxValuesData::Group::get_rgb(const char* pName, const cxColor& defVal) const {
+	cxColor c = defVal;
+	int idx = find_val_idx(pName);
+	if (idx >= 0) {
+		xt_float3 f3 = get_val_f3(idx);
+		c.set(f3.x, f3.y, f3.z);
+	}
+	return c;
+}
+
+const char* sxValuesData::Group::get_str(const char* pName, const char* pDefVal) const {
+	const char* pStr = pDefVal;
+	int idx = find_val_idx(pName);
+	if (idx >= 0) {
+		pStr = get_val_s(idx);
 	}
 	return pStr;
 }
@@ -654,6 +778,15 @@ sxGeometryData::Polygon sxGeometryData::get_pol(int idx) const {
 	return pol;
 }
 
+int32_t* sxGeometryData::get_skin_node_name_ids() const {
+	int32_t* pIds = nullptr;
+	cxSphere* pSphTop = get_skin_sph_top();
+	if (pSphTop) {
+		pIds = reinterpret_cast<int32_t*>(&pSphTop[mSkinNodeNum]);
+	}
+	return pIds;
+}
+
 const char* sxGeometryData::get_skin_node_name(int idx) const {
 	const char* pName = nullptr;
 	if (ck_skin_idx(idx)) {
@@ -864,6 +997,22 @@ xt_texcoord sxGeometryData::get_pnt_texcoord(int pntIdx) const {
 	xt_texcoord tex;
 	tex.set(0.0f, 0.0f);
 	int attrIdx = find_pnt_attr("uv");
+	if (attrIdx >= 0) {
+		float* pData = get_attr_data_f(attrIdx, eAttrClass::POINT, pntIdx, 2);
+		if (pData) {
+			tex.set(pData[0], pData[1]);
+		}
+	}
+	return tex;
+}
+
+xt_texcoord sxGeometryData::get_pnt_texcoord2(int pntIdx) const {
+	xt_texcoord tex;
+	tex.set(0.0f, 0.0f);
+	int attrIdx = find_pnt_attr("uv2");
+	if (attrIdx < 0) {
+		attrIdx = find_pnt_attr("uv");
+	}
 	if (attrIdx >= 0) {
 		float* pData = get_attr_data_f(attrIdx, eAttrClass::POINT, pntIdx, 2);
 		if (pData) {
@@ -1344,8 +1493,13 @@ bool sxGeometryData::Polygon::intersect(const cxLineSeg& seg, cxVec* pHitPos, cx
 				qvtx[i] = get_vtx_pos(i);
 			}
 			pTri = tri0;
-			planarFlg = is_planar();
-			cvxMsk = nxGeom::quad_convex_ck(qvtx[0], qvtx[1], qvtx[2], qvtx[3]);
+			if (mpGeom->all_quads_planar_convex()) {
+				planarFlg = true;
+				cvxMsk = 3;
+			} else {
+				planarFlg = is_planar();
+				cvxMsk = nxGeom::quad_convex_ck(qvtx[0], qvtx[1], qvtx[2], qvtx[3]);
+			}
 			if (planarFlg && cvxMsk == 3) {
 				res = nxGeom::seg_quad_intersect_cw(sp0, sp1, qvtx[0], qvtx[1], qvtx[2], qvtx[3], pHitPos, pHitNrm);
 			} else {
@@ -1444,6 +1598,34 @@ bool sxGeometryData::Group::contains(int idx) const {
 		res = !!(pBits[bit >> 3] & (1 << (bit & 7)));
 	}
 	return res;
+}
+
+cxSphere* sxGeometryData::Group::get_skin_spheres() const {
+	cxSphere* pSph = nullptr;
+	if (is_valid()) {
+		int nskn = mpInfo->mSkinNodeNum;
+		if (nskn) {
+			if (mpGeom->has_skin_spheres()) {
+				pSph = (cxSphere*)(mpInfo + 1);
+			}
+		}
+	}
+	return pSph;
+}
+
+uint16_t* sxGeometryData::Group::get_skin_ids() const {
+	uint16_t* pLst = nullptr;
+	if (is_valid()) {
+		int nskn = mpInfo->mSkinNodeNum;
+		if (nskn) {
+			if (mpGeom->has_skin_spheres()) {
+				pLst = (uint16_t*)XD_INCR_PTR(mpInfo + 1, sizeof(cxSphere)*nskn);
+			} else {
+				pLst = (uint16_t*)(mpInfo + 1);
+			}
+		}
+	}
+	return pLst;
 }
 
 
@@ -1655,6 +1837,182 @@ void sxTextureData::DDS::save(const char* pOutPath) const {
 	if (is_valid()) {
 		nxCore::bin_save(pOutPath, mpHead, mSize);
 	}
+}
+
+/* see PBRT book for details */
+static void calc_resample_wgts(int oldRes, int newRes, xt_float4* pWgt, int16_t* pOrg) {
+	float rt = float(oldRes) / float(newRes);
+	float fw = 2.0f;
+	for (int i = 0; i < newRes; ++i) {
+		float c = (float(i) + 0.5f) * rt;
+		float org = nxCalc::floor((c - fw) + 0.5f);
+		pOrg[i] = (int16_t)org;
+		float* pW = pWgt[i];
+		float s = 0.0f;
+		for (int j = 0; j < 4; ++j) {
+			float pos = org + float(j) + 0.5f;
+			float x = ::fabsf((pos - c) / fw);
+			float w;
+			if (x < 1.0e-5f) {
+				w = 1.0f;
+			} else if (x > 1.0f) {
+				w = 1.0f;
+			} else {
+				x *= XD_PI;
+				w = nxCalc::sinc(x*2.0f) * nxCalc::sinc(x);
+			}
+			pW[j] = w;
+			s += w;
+		}
+		s = nxCalc::rcp0(s);
+		pWgt[i].scl(s);
+	}
+}
+
+sxTextureData::Pyramid* sxTextureData::get_pyramid() const {
+	sxTextureData::Pyramid* pPmd = nullptr;
+	int w0 = get_width();
+	int h0 = get_height();
+	int w = w0;
+	int h = h0;
+	bool flgW = nxCore::is_pow2(w);
+	bool flgH = nxCore::is_pow2(h);
+	int baseW = flgW ? w : (1 << (1 + (int)::log2f(float(w))));
+	int baseH = flgH ? h : (1 << (1 + (int)::log2f(float(h))));
+	w = baseW;
+	h = baseH;
+	int nlvl = 1;
+	int npix = 1;
+	while (w > 1 || h > 1) {
+		npix += w*h;
+		if (w > 1) w >>= 1;
+		if (h > 1) h >>= 1;
+		++nlvl;
+	}
+	size_t headSize = sizeof(Pyramid) + (nlvl - 1) * sizeof(uint32_t);
+	uint32_t topOffs = (uint32_t)XD_ALIGN(headSize, 0x10);
+	size_t memSize = topOffs + npix * sizeof(cxColor);
+	pPmd = reinterpret_cast<sxTextureData::Pyramid*>(nxCore::mem_alloc(memSize));
+	pPmd->mBaseWidth = baseW;
+	pPmd->mBaseHeight = baseH;
+	pPmd->mLvlNum = nlvl;
+	w = baseW;
+	h = baseH;
+	uint32_t offs = topOffs;
+	for (int i = 0; i < nlvl; ++i) {
+		pPmd->mLvlOffs[i] = offs;
+		offs += w*h * sizeof(cxColor);
+		if (w > 1) w >>= 1;
+		if (h > 1) h >>= 1;
+	}
+	int wgtNum = nxCalc::max(baseW, baseH);
+	cxColor* pBase = get_rgba();
+	cxColor* pLvl = pPmd->get_lvl(0);
+	if (flgW && flgH) {
+		::memcpy(pLvl, pBase, baseW*baseH * sizeof(cxColor));
+	} else {
+		xt_float4* pWgt = reinterpret_cast<xt_float4*>(nxCore::mem_alloc(wgtNum * sizeof(xt_float4)));
+		int16_t* pOrg = reinterpret_cast<int16_t*>(nxCore::mem_alloc(wgtNum * sizeof(int16_t)));
+		cxColor* pTmp = reinterpret_cast<cxColor*>(nxCore::mem_alloc(wgtNum * sizeof(cxColor)));
+		calc_resample_wgts(w0, baseW, pWgt, pOrg);
+		for (int y = 0; y < h0; ++y) {
+			for (int x = 0; x < baseW; ++x) {
+				cxColor clr;
+				clr.zero();
+				xt_float4 wgt = pWgt[x];
+				for (int i = 0; i < 4; ++i) {
+					int x0 = nxCalc::clamp(pOrg[x] + i, 0, w0 - 1);
+					cxColor csrc = pBase[y*w0 + x0];
+					csrc.scl(wgt[i]);
+					clr.add(csrc);
+				}
+				pLvl[y*baseW + x] = clr;
+			}
+		}
+		calc_resample_wgts(h0, baseH, pWgt, pOrg);
+		for (int x = 0; x < baseW; ++x) {
+			for (int y = 0; y < baseH; ++y) {
+				cxColor clr;
+				clr.zero();
+				xt_float4 wgt = pWgt[y];
+				for (int i = 0; i < 4; ++i) {
+					int y0 = nxCalc::clamp(pOrg[y] + i, 0, h0 - 1);
+					cxColor csrc = pLvl[y0*baseW + x];
+					csrc.scl(wgt[i]);
+					clr.add(csrc);
+				}
+				pTmp[y] = clr;
+			}
+			for (int y = 0; y < baseH; ++y) {
+				pLvl[y*baseW + x] = pTmp[y];
+			}
+		}
+		nxCore::mem_free(pTmp);
+		nxCore::mem_free(pOrg);
+		nxCore::mem_free(pWgt);
+	}
+	nxCore::mem_free(pBase);
+	w = baseW / 2;
+	h = baseH / 2;
+	for (int i = 1; i < nlvl; ++i) {
+		cxColor* pLvlSrc = pPmd->get_lvl(i - 1);
+		cxColor* pLvlDst = pPmd->get_lvl(i);
+		int wsrc = w * 2;
+		int hsrc = h * 2;
+		for (int y = 0; y < w; ++y) {
+			for (int x = 0; x < h; ++x) {
+				int sx0 = nxCalc::min(x * 2, wsrc - 1);
+				int sy0 = nxCalc::min(y * 2, hsrc - 1);
+				int sx1 = nxCalc::min(sx0 + 1, wsrc - 1);
+				int sy1 = nxCalc::min(sy0 + 1, hsrc - 1);
+				cxColor clr = pLvlSrc[sy0*wsrc + sx0];
+				clr.add(pLvlSrc[sy0*wsrc + sx1]);
+				clr.add(pLvlSrc[sy1*wsrc + sx0]);
+				clr.add(pLvlSrc[sy1*wsrc + sx1]);
+				clr.scl(0.25f);
+				pLvlDst[y*w + x] = clr;
+			}
+		}
+		if (w > 1) w >>= 1;
+		if (h > 1) h >>= 1;
+	}
+	return pPmd;
+}
+
+void sxTextureData::Pyramid::get_lvl_dims(int idx, int* pWidth, int* pHeight) const {
+	int w = 0;
+	int h = 0;
+	if (ck_lvl_idx(idx)) {
+		w = mBaseWidth;
+		h = mBaseHeight;
+		for (int i = 0; i < idx; ++i) {
+			if (w > 1) w >>= 1;
+			if (h > 1) h >>= 1;
+		}
+	}
+	if (pWidth) {
+		*pWidth = w;
+	}
+	if (pHeight) {
+		*pHeight = h;
+	}
+}
+
+sxTextureData::DDS sxTextureData::Pyramid::get_lvl_dds(int idx) const {
+	DDS dds;
+	dds.mpHead = nullptr;
+	dds.mSize = 0;
+	if (ck_lvl_idx(idx)) {
+		int w, h;
+		get_lvl_dims(idx, &w, &h);
+		dds.mpHead = nxTexture::alloc_dds128(w, h, &dds.mSize);
+		cxColor* pLvl = get_lvl(idx);
+		if (pLvl) {
+			cxColor* pDst = reinterpret_cast<cxColor*>(dds.mpHead + 1);
+			::memcpy(pDst, pLvl, w*h * sizeof(cxColor));
+		}
+	}
+	return dds;
 }
 
 

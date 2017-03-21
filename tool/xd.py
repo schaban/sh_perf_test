@@ -479,7 +479,7 @@ class BinReader:
 		data.fromfile(self.file, 1)
 		return data[0]
 	def readStringLim(self, r = xrange(0x80)):
-		data = array("b")
+		data = array("B")
 		for i in r:
 			data.fromfile(self.file, 1)
 			if not data[i]:
