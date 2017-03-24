@@ -1959,8 +1959,8 @@ sxTextureData::Pyramid* sxTextureData::get_pyramid() const {
 		cxColor* pLvlDst = pPmd->get_lvl(i);
 		int wsrc = w * 2;
 		int hsrc = h * 2;
-		for (int y = 0; y < w; ++y) {
-			for (int x = 0; x < h; ++x) {
+		for (int y = 0; y < h; ++y) {
+			for (int x = 0; x < w; ++x) {
 				int sx0 = nxCalc::min(x * 2, wsrc - 1);
 				int sy0 = nxCalc::min(y * 2, hsrc - 1);
 				int sx1 = nxCalc::min(sx0 + 1, wsrc - 1);
