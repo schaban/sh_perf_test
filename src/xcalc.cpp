@@ -9,20 +9,7 @@
 
 namespace nxCalc {
 
-float hermite(float p0, float m0, float p1, float m1, float t) {
-	float tt = t*t;
-	float ttt = tt*t;
-	float tt3 = tt*3.0f;
-	float tt2 = tt + tt;
-	float ttt2 = tt2 * t;
-	float h00 = ttt2 - tt3 + 1.0f;
-	float h10 = ttt - tt2 + t;
-	float h01 = -ttt2 + tt3;
-	float h11 = ttt - tt;
-	return (h00*p0 + h10*m0 + h01*p1 + h11*m1);
-}
-
-float bezier01(float t, float p1, float p2) {
+float ease_crv(float t, float p1, float p2) {
 	static XMMATRIX bm = {
 		{ -1.0f, 3.0f, -3.0f, 1.0f },
 		{ 3.0f, -6.0f, 3.0f, 0.0f },
@@ -35,6 +22,19 @@ float bezier01(float t, float p1, float p2) {
 	tv = XMVector4Transform(tv, bm);
 	float val = p1*XMVectorGetY(tv) + p2*XMVectorGetZ(tv) + XMVectorGetW(tv);
 	return val;
+}
+
+float hermite(float p0, float m0, float p1, float m1, float t) {
+	float tt = t*t;
+	float ttt = tt*t;
+	float tt3 = tt*3.0f;
+	float tt2 = tt + tt;
+	float ttt2 = tt2 * t;
+	float h00 = ttt2 - tt3 + 1.0f;
+	float h10 = ttt - tt2 + t;
+	float h01 = -ttt2 + tt3;
+	float h11 = ttt - tt;
+	return (h00*p0 + h10*m0 + h01*p1 + h11*m1);
 }
 
 float fit(float val, float oldMin, float oldMax, float newMin, float newMax) {

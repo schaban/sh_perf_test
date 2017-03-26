@@ -981,13 +981,22 @@ cxVec sxGeometryData::calc_pnt_bitangent(int pntIdx) const {
 	return btg;
 }
 
-cxColor sxGeometryData::get_pnt_color(int pntIdx) const {
+cxColor sxGeometryData::get_pnt_color(int pntIdx, bool useAlpha) const {
 	cxColor clr(1.0f, 1.0f, 1.0f);
 	int attrIdx = find_pnt_attr("Cd");
 	if (attrIdx >= 0) {
 		float* pData = get_attr_data_f(attrIdx, eAttrClass::POINT, pntIdx, 3);
 		if (pData) {
 			clr.set(pData[0], pData[1], pData[2]);
+		}
+	}
+	if (useAlpha) {
+		attrIdx = find_pnt_attr("Alpha");
+		if (attrIdx >= 0) {
+			float* pData = get_attr_data_f(attrIdx, eAttrClass::POINT, pntIdx, 1);
+			if (pData) {
+				clr.set_a(*pData);
+			}
 		}
 	}
 	return clr;

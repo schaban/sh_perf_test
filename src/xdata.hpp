@@ -447,7 +447,7 @@ struct sxGeometryData : public sxData {
 	cxVec get_pnt_tangent(int pntIdx) const;
 	cxVec get_pnt_bitangent(int pntIdx) const;
 	cxVec calc_pnt_bitangent(int pntIdx) const;
-	cxColor get_pnt_color(int pntIdx) const;
+	cxColor get_pnt_color(int pntIdx, bool useAlpha = true) const;
 	xt_texcoord get_pnt_texcoord(int pntIdx) const;
 	xt_texcoord get_pnt_texcoord2(int pntIdx) const;
 	int get_pnt_wgt_num(int pntIdx) const;

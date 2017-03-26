@@ -636,6 +636,50 @@ public:
 	void wait() const;
 };
 
+class cxKeyCtrl {
+public:
+	struct KeyInfo {
+		const char* mpName;
+		uint32_t mId;
+	};
+
+protected:
+	struct KeyCode {
+		int32_t mCode;
+		int32_t mId;
+
+		KeyCode() : mCode(-1), mId(-1) {}
+
+		bool is_valid() const { return mCode >= 0 && mId >= 0; }
+	};
+
+	KeyCode* mpKeys;
+	int mKeysNum;
+
+	uint32_t mNow;
+	uint32_t mOld;
+	uint32_t mChg;
+	uint32_t mTrg;
+
+	static int32_t find_key_code(const char* pName);
+
+public:
+	cxKeyCtrl() : mpKeys(nullptr), mKeysNum(0), mNow(0), mOld(0), mChg(0), mTrg(0) {}
+	~cxKeyCtrl() { reset(); }
+
+	void init(KeyInfo* pKeys, int nkeys);
+	void reset();
+
+	void update();
+
+	bool ck_now(uint32_t id) const;
+	bool ck_old(uint32_t id) const;
+	bool ck_chg(uint32_t id) const;
+	bool ck_trg(uint32_t id) const;
+
+	static bool validate_key_id(uint32_t id) { return id < 32U; }
+};
+
 
 class cxMouse {
 public:

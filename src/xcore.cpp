@@ -810,6 +810,175 @@ void cxWorkBrigade::wait() const {
 }
 
 
+/*static*/ int32_t cxKeyCtrl::find_key_code(const char* pName) {
+	size_t len = ::strlen(pName);
+	if (1 == len) {
+		int32_t chr = ::toupper(pName[0]);
+		if ((chr >= '0' && chr <= '9') || (chr >= 'A' && chr <= 'Z')) {
+			return chr;
+		}
+	} else {
+		static struct _KEYMAP_ {
+			const char* pName;
+			int32_t code;
+		} keymap[] = {
+			{ "[LMB]", VK_LBUTTON },
+			{ "[RMB]", VK_RBUTTON },
+			{ "[MMB]", VK_MBUTTON },
+			{ "[BACK]", VK_BACK },
+			{ "[TAB]", VK_TAB },
+			{ "[ENTER]", VK_RETURN },
+			{ "[SPACE]",  VK_SPACE },
+			{ "[LSHIFT]", VK_LSHIFT },
+			{ "[LCTRL]", VK_LCONTROL },
+			{ "[RSHIFT]", VK_RSHIFT },
+			{ "[RCTRL]", VK_RCONTROL },
+			{ "[UP]", VK_UP },
+			{ "[DOWN]", VK_DOWN },
+			{ "[LEFT]", VK_LEFT },
+			{ "[RIGHT]", VK_RIGHT },
+			{ "[INS]", VK_INSERT },
+			{ "[DEL]", VK_DELETE },
+			{ "[HOME]", VK_HOME },
+			{ "[END]", VK_END },
+			{ "[PGUP]", VK_PRIOR },
+			{ "[PGDN]", VK_NEXT },
+			{ "[ESC]", VK_ESCAPE },
+			{ "[F1]", VK_F1 },
+			{ "[F2]", VK_F2 },
+			{ "[F3]", VK_F3 },
+			{ "[F4]", VK_F4 },
+			{ "[F5]", VK_F5 },
+			{ "[F6]", VK_F6 },
+			{ "[F7]", VK_F7 },
+			{ "[F8]", VK_F8 },
+			{ "[F9]", VK_F9 },
+			{ "[F10]", VK_F10 },
+			{ "[F11]", VK_F11 },
+			{ "[F12]", VK_F12 },
+			{ "#0", VK_NUMPAD0 },
+			{ "#1", VK_NUMPAD1 },
+			{ "#2", VK_NUMPAD2 },
+			{ "#3", VK_NUMPAD3 },
+			{ "#4", VK_NUMPAD4 },
+			{ "#5", VK_NUMPAD5 },
+			{ "#6", VK_NUMPAD6 },
+			{ "#7", VK_NUMPAD7 },
+			{ "#8", VK_NUMPAD8 },
+			{ "#9", VK_NUMPAD9 },
+			{ "#/", VK_DIVIDE },
+			{ "#*", VK_MULTIPLY },
+			{ "#-", VK_SUBTRACT },
+			{ "#+", VK_ADD },
+			{ "#.", VK_DECIMAL }
+		};
+		for (int i = 0; i < XD_ARY_LEN(keymap); ++i) {
+			if (::_strcmpi(pName, keymap[i].pName) == 0) {
+				return keymap[i].code;
+			}
+		}
+	}
+	return -1;
+}
+
+void cxKeyCtrl::init(KeyInfo* pKeys, int nkeys) {
+	if (!pKeys) return;
+	int n = 0;
+	for (int i = 0; i < nkeys; ++i) {
+		if (pKeys[i].mpName) {
+			if (validate_key_id(pKeys[i].mId)) {
+				if (find_key_code(pKeys[i].mpName) > 0) {
+					++n;
+				} else {
+					nxCore::dbg_msg("Unknown key name: %s\n", pKeys[i].mpName);
+				}
+			} else {
+				nxCore::dbg_msg("Invalid key id: %s, 0x%X\n", pKeys[i].mpName, pKeys[i].mId);
+			}
+		}
+	}
+	if (n > 0) {
+		mpKeys = nxCore::obj_alloc<KeyCode>(n);
+		if (mpKeys) {
+			mKeysNum = n;
+			int kidx = 0;
+			for (int i = 0; i < nkeys; ++i) {
+				if (pKeys[i].mpName) {
+					if (validate_key_id(pKeys[i].mId)) {
+						int code = find_key_code(pKeys[i].mpName);
+						if (code > 0) {
+							mpKeys[kidx].mCode = code;
+							mpKeys[kidx].mId = pKeys[i].mId;
+							++kidx;
+						}
+					}
+				}
+			}
+		}
+	}
+	mOld = 0;
+	mNow = 0;
+	mChg = 0;
+	mTrg = 0;
+}
+
+void cxKeyCtrl::reset() {
+	if (mpKeys) {
+		nxCore::obj_free(mpKeys, mKeysNum);
+		mpKeys = nullptr;
+		mKeysNum = 0;
+	}
+}
+
+void cxKeyCtrl::update() {
+	if (!mpKeys) return;
+	uint32_t state = 0;
+	for (int i = 0; i < mKeysNum; ++i) {
+		if (mpKeys[i].is_valid()) {
+			if (!!(::GetAsyncKeyState(mpKeys[i].mCode) & 0x8000)) {
+				state |= 1U << mpKeys[i].mId;
+			}
+		}
+	}
+	mOld = mNow;
+	mNow = state;
+	mChg = state ^ mOld;
+	mTrg = state & mChg;
+}
+
+bool cxKeyCtrl::ck_now(uint32_t id) const {
+	bool res = false;
+	if (mpKeys && validate_key_id(id)) {
+		res = !!(mNow & (1U << id));
+	}
+	return res;
+}
+
+bool cxKeyCtrl::ck_old(uint32_t id) const {
+	bool res = false;
+	if (mpKeys && validate_key_id(id)) {
+		res = !!(mOld & (1U << id));
+	}
+	return res;
+}
+
+bool cxKeyCtrl::ck_chg(uint32_t id) const {
+	bool res = false;
+	if (mpKeys && validate_key_id(id)) {
+		res = !!(mChg & (1U << id));
+	}
+	return res;
+}
+
+bool cxKeyCtrl::ck_trg(uint32_t id) const {
+	bool res = false;
+	if (mpKeys && validate_key_id(id)) {
+		res = !!(mTrg & (1U << id));
+	}
+	return res;
+}
+
+
 void cxMouse::update(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 	static UINT mouseMsg[] = {
 		WM_LBUTTONDOWN, WM_LBUTTONUP, WM_LBUTTONDBLCLK,

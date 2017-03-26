@@ -150,10 +150,33 @@ inline float rcp0(float x) { return div0(1.0f, x); }
 
 inline float lerp(float a, float b, float t) { return a + (b - a)*t; }
 
-float hermite(float p0, float m0, float p1, float m1, float t);
-float bezier01(float t, float p1, float p2);
-float fit(float val, float oldMin, float oldMax, float newMin, float newMax);
+inline float ease(float t, float e = 1.0f) {
+	float x = 0.5f - 0.5f*::cosf(t*XD_PI);
+	if (e != 1.0f) {
+		x = ::powf(x, e);
+	}
+	return x;
+}
 
+inline float ease_in(float t, float e = 1.0f) {
+	float x = 1.0f - ::cosf(t*0.5f*XD_PI);
+	if (e != 1.0f) {
+		x = ::powf(x, e);
+	}
+	return x;
+}
+
+inline float ease_out(float t, float e = 1.0f) {
+	float x = ::sinf(t*0.5f*XD_PI);
+	if (e != 1.0f) {
+		x = ::powf(x, 1.0f / e);
+	}
+	return x;
+}
+
+float ease_crv(float t, float p1, float p2);
+float hermite(float p0, float m0, float p1, float m1, float t);
+float fit(float val, float oldMin, float oldMax, float newMin, float newMax);
 float calc_fovy(float focal, float aperture, float aspect);
 
 } // nxCalc
