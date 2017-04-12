@@ -1684,6 +1684,18 @@ void cxAABB::transform(const cxAABB& box, const cxMtx& mtx) {
 	mMax.set_xv(nmax);
 }
 
+cxVec cxAABB::closest_pnt(const cxVec& pos, bool onFace) const {
+	cxVec res = nxVec::min(nxVec::max(pos, mMin), mMax);
+	if (onFace && contains(res)) {
+		cxVec relMin = res - mMin;
+		cxVec relMax = mMax - res;
+		cxVec dmin = nxVec::min(relMin, relMax);
+		int elemIdx = (dmin.x < dmin.y && dmin.x < dmin.z) ? 0 : dmin.y < dmin.z ? 1 : 2;
+		res.set_at(elemIdx, (relMin[elemIdx] < relMax[elemIdx] ? mMin : mMax)[elemIdx]);
+	}
+	return res;
+}
+
 bool cxAABB::seg_ck(const cxVec& p0, const cxVec& p1) const {
 	cxVec dir = p1 - p0;
 	float len = dir.mag();

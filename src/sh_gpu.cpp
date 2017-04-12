@@ -9,7 +9,7 @@ void sGPUCompute::init() {
 	mDev = nxCore::create_def_gfx_device();
 	if (!mDev.is_valid()) return;
 	if (!mDev.is_dx11_level()) {
-		mDev.relese();
+		mDev.release();
 		return;
 	}
 	HRESULT hres = mDev.mpDev->CreateClassLinkage(&mpLinkage);
@@ -81,7 +81,7 @@ void sGPUCompute::reset() {
 		mpLinkage->Release();
 		mpLinkage = nullptr;
 	}
-	mDev.relese();
+	mDev.release();
 }
 
 void sGPUCompute::set_sh(int order, const float* pR, const float* pG, const float* pB, const float* pWgt) {

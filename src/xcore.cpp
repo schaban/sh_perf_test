@@ -200,6 +200,14 @@ bool str_eq(const char* pStrA, const char* pStrB) {
 	return res;
 }
 
+bool str_eqi(const char* pStrA, const char* pStrB) {
+	bool res = false;
+	if (pStrA && pStrB) {
+		res = ::_strcmpi(pStrA, pStrB) == 0;
+	}
+	return res;
+}
+
 bool str_starts_with(const char* pStr, const char* pPrefix) {
 	if (pStr && pPrefix) {
 		size_t len = ::strlen(pPrefix);
@@ -1021,6 +1029,7 @@ void cxMouse::update(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam) {
 		mState.mOldY = mState.mNowY;
 		mState.mNowX = posX;
 		mState.mNowY = posY;
+		exec();
 	}
 }
 

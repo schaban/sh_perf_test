@@ -182,6 +182,7 @@ struct sxRigData : public sxData {
 
 		exRotOrd get_rot_order() const { return (exRotOrd)mRotOrd; }
 		exTransformOrd get_xform_order() const { return (exTransformOrd)mXfmOrd; }
+		bool is_hrc_top() const { return mParentIdx < 0; }
 	};
 
 	bool ck_node_idx(int idx) const { return (uint32_t)idx < mNodeNum; }
@@ -209,6 +210,7 @@ struct sxRigData : public sxData {
 	cxVec get_lscl(int idx) const;
 	cxVec get_lrot(int idx, bool inRadians = false) const;
 	cxQuat calc_lquat(int idx) const;
+	cxMtx calc_wmtx(int idx, const cxMtx* pMtxLocal, cxMtx* pParentWMtx = nullptr) const;
 
 	void dump_node_names_f(FILE* pFile = stdout) const;
 	void dump_node_names(const char* pOutPath = nullptr) const;

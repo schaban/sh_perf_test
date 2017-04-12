@@ -728,6 +728,28 @@ cxQuat sxRigData::calc_lquat(int idx) const {
 	return q;
 }
 
+cxMtx sxRigData::calc_wmtx(int idx, const cxMtx* pMtxLocal, cxMtx* pParentWMtx) const {
+	cxMtx mtx;
+	mtx.identity();
+	cxMtx parentMtx;
+	parentMtx.identity();
+	if (pMtxLocal && ck_node_idx(idx)) {
+		Node* pNode = get_node_ptr(idx);
+		mtx = pMtxLocal[pNode->mSelfIdx];
+		pNode = get_node_ptr(pNode->mParentIdx);
+		while (pNode && !pNode->is_hrc_top()) {
+			parentMtx.mul(pMtxLocal[pNode->mSelfIdx]);
+			pNode = get_node_ptr(pNode->mParentIdx);
+		}
+		parentMtx.mul(pMtxLocal[pNode->mSelfIdx]);
+		mtx.mul(parentMtx);
+	}
+	if (pParentWMtx) {
+		*pParentWMtx = parentMtx;
+	}
+	return mtx;
+}
+
 void sxRigData::dump_node_names_f(FILE* pFile) const {
 	if (!pFile) return;
 	int n = get_nodes_num();

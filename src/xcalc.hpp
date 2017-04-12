@@ -1135,9 +1135,9 @@ public:
 	void transform(const cxAABB& box, const cxMtx& mtx);
 	void transform(const cxMtx& mtx) { transform(*this, mtx); }
 
-	void from_seg(const cxLineSeg& seg) {
-		set(seg.get_pos0(), seg.get_pos1());
-	}
+	void from_seg(const cxLineSeg& seg) { set(seg.get_pos0(), seg.get_pos1()); }
+
+	cxVec closest_pnt(const cxVec& pos, bool onFace = true) const;
 
 	bool contains(const cxVec& pos) const { return nxGeom::pnt_in_aabb(pos, mMin, mMax); }
 
