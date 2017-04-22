@@ -1136,6 +1136,7 @@ public:
 	void transform(const cxMtx& mtx) { transform(*this, mtx); }
 
 	void from_seg(const cxLineSeg& seg) { set(seg.get_pos0(), seg.get_pos1()); }
+	void from_sph(const cxSphere& sph);
 
 	cxVec closest_pnt(const cxVec& pos, bool onFace = true) const;
 

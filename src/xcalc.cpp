@@ -1684,6 +1684,13 @@ void cxAABB::transform(const cxAABB& box, const cxMtx& mtx) {
 	mMax.set_xv(nmax);
 }
 
+void cxAABB::from_sph(const cxSphere& sph) {
+	cxVec c = sph.get_center();
+	cxVec r = sph.get_radius();
+	mMin = c - r;
+	mMax = c + r;
+}
+
 cxVec cxAABB::closest_pnt(const cxVec& pos, bool onFace) const {
 	cxVec res = nxVec::min(nxVec::max(pos, mMin), mMax);
 	if (onFace && contains(res)) {
@@ -1748,15 +1755,6 @@ bool cxAABB::overlaps(const cxCapsule& cap) const {
 	return nxGeom::cap_aabb_overlap(cap.get_pos0(), cap.get_pos1(), cap.get_radius(), mMin, mMax);
 }
 
-
-bool cxCapsule::overlaps(const cxAABB& box) const {
-	return nxGeom::cap_aabb_overlap(mPos0, mPos1, mRadius, box.get_min_pos(), box.get_max_pos());
-}
-
-bool cxCapsule::overlaps(const cxCapsule& cap) const {
-	return nxGeom::cap_cap_overlap(mPos0, mPos1, mRadius, cap.mPos0, cap.mPos1, cap.mRadius);
-}
-
 void cxAABB::get_polyhedron(cxPlane* pPln) const {
 	if (!pPln) return;
 	cxVec vmin = get_min_pos();
@@ -1767,6 +1765,15 @@ void cxAABB::get_polyhedron(cxPlane* pPln) const {
 	pPln[3].calc(vmax, nxVec::get_axis(exAxis::PLUS_X)); /* right */
 	pPln[4].calc(vmin, nxVec::get_axis(exAxis::MINUS_Z)); /* far */
 	pPln[5].calc(vmax, nxVec::get_axis(exAxis::PLUS_Z)); /* near */
+}
+
+
+bool cxCapsule::overlaps(const cxAABB& box) const {
+	return nxGeom::cap_aabb_overlap(mPos0, mPos1, mRadius, box.get_min_pos(), box.get_max_pos());
+}
+
+bool cxCapsule::overlaps(const cxCapsule& cap) const {
+	return nxGeom::cap_cap_overlap(mPos0, mPos1, mRadius, cap.mPos0, cap.mPos1, cap.mRadius);
 }
 
 

@@ -487,7 +487,7 @@ public:
 	const char* get_name() const { return mName; }
 	HANDLE get_done_handle() const { return mhDone; }
 
-	void init(const char* pName = "cxWorker");
+	void init(const char* pName = "cxWorker", uint32_t stackSize = 0);
 	void start() {
 		::ResumeThread(mhThread);
 		wait();
@@ -626,7 +626,7 @@ public:
 	cxWorkBrigade() : mpWrkAry(nullptr), mWrkNum(0), mpQue(nullptr) {}
 	~cxWorkBrigade() { reset();  }
 
-	void init(int wrkNum);
+	void init(int wrkNum, uint32_t stackSize = 0);
 	void reset();
 	bool is_valid() const { return (mWrkNum > 0 && mpWrkAry); }
 	int get_wrk_num() const { return mWrkNum; }

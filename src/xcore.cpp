@@ -636,9 +636,9 @@ void cxWorker::set_name(const char* pName) {
 	set_obj_name(mName, sizeof(mName), pName);
 }
 
-void cxWorker::init(const char* pName) {
+void cxWorker::init(const char* pName, uint32_t stackSize) {
 	set_name(pName);
-	mhThread = ::CreateThread(NULL, 0, wrk_entry, this, CREATE_SUSPENDED, &mTID);
+	mhThread = ::CreateThread(NULL, stackSize, wrk_entry, this, CREATE_SUSPENDED, &mTID);
 	mhExec = ::CreateEvent(NULL, FALSE, FALSE, NULL);
 	mhDone = ::CreateEvent(NULL, FALSE, FALSE, NULL);
 	mEndFlg = false;
@@ -758,7 +758,7 @@ void cxWorkBrigade::Worker::main() {
 	}
 }
 
-void cxWorkBrigade::init(int wrkNum) {
+void cxWorkBrigade::init(int wrkNum, uint32_t stackSize) {
 	if (wrkNum < 1) wrkNum = 1;
 	if (wrkNum > MAX_WORKERS) wrkNum = MAX_WORKERS;
 	size_t memsize = wrkNum * sizeof(Worker);
@@ -770,7 +770,7 @@ void cxWorkBrigade::init(int wrkNum) {
 		mWrkNum = wrkNum;
 		mpWrkAry = pWrk;
 		for (int i = 0; i < wrkNum; ++i) {
-			mpWrkAry[i].init();
+			mpWrkAry[i].init("Brigade:Worker", stackSize);
 		}
 		for (int i = 0; i < wrkNum; ++i) {
 			mpWrkAry[i].mpBrigade = this;
