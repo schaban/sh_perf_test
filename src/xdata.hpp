@@ -323,8 +323,9 @@ struct sxGeometryData : public sxData {
 		cxVec calc_normal() const { return calc_normal_cw(); }
 		bool is_tri() const { return get_vtx_num() == 3; }
 		bool is_quad() const { return get_vtx_num() == 4; }
-		bool is_planar(float eps = 1.0e-6f);
-		bool intersect(const cxLineSeg& seg, cxVec* pHitPos = nullptr, cxVec* pHitNrm = nullptr, QuadInfo* pQuadInfo = nullptr);
+		bool is_planar(float eps = 1.0e-6f) const;
+		bool intersect(const cxLineSeg& seg, cxVec* pHitPos = nullptr, cxVec* pHitNrm = nullptr, QuadInfo* pQuadInfo = nullptr) const;
+		bool contains_xz(const cxVec& pos) const;
 	};
 
 	struct GrpInfo {

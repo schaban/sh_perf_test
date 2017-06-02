@@ -1489,7 +1489,7 @@ cxVec sxGeometryData::Polygon::calc_normal_ccw() const {
 	return nrm;
 }
 
-bool sxGeometryData::Polygon::is_planar(float eps) {
+bool sxGeometryData::Polygon::is_planar(float eps) const {
 	int nvtx = get_vtx_num();
 	if (nvtx < 4) return true;
 	cxVec c = calc_centroid();
@@ -1502,7 +1502,7 @@ bool sxGeometryData::Polygon::is_planar(float eps) {
 	return true;
 }
 
-bool sxGeometryData::Polygon::intersect(const cxLineSeg& seg, cxVec* pHitPos, cxVec* pHitNrm, QuadInfo* pQuadInfo) {
+bool sxGeometryData::Polygon::intersect(const cxLineSeg& seg, cxVec* pHitPos, cxVec* pHitNrm, QuadInfo* pQuadInfo) const {
 	int i;
 	bool res = false;
 	int nvtx = get_vtx_num();
@@ -1564,6 +1564,30 @@ bool sxGeometryData::Polygon::intersect(const cxLineSeg& seg, cxVec* pHitPos, cx
 			break;
 	}
 	return res;
+}
+
+bool sxGeometryData::Polygon::contains_xz(const cxVec& pos) const {
+	if (!is_valid()) return false;
+	int cnt = 0;
+	float rx0 = pos.x;
+	float rz0 = pos.z;
+	float rx1 = mpGeom->mBBox.get_max_pos().x + 1.0e-5f;
+	float rz1 = rz0;
+	int nvtx = get_vtx_num();
+	for (int i = 0; i < nvtx; ++i) {
+		int j = i + 1;
+		if (j >= nvtx) j = 0;
+		cxVec p0 = get_vtx_pos(i);
+		cxVec p1 = get_vtx_pos(j);
+		float ex0 = p0.x;
+		float ez0 = p0.z;
+		float ex1 = p1.x;
+		float ez1 = p1.z;
+		if (nxGeom::seg_seg_overlap_2d(rx0, rz0, rx1, rz1, ex0, ez0, ex1, ez1)) {
+			++cnt;
+		}
+	}
+	return !!(cnt & 1);
 }
 
 

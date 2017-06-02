@@ -131,14 +131,6 @@ inline float sinc(float x) {
 template<typename T> inline T sq(T x) { return x*x; }
 template<typename T> inline T cb(T x) { return x*x*x; }
 
-inline float hypot(float x, float y) {
-#if 0
-	return ::hypotf(x, y);
-#else
-	return ::sqrtf(sq(x) + sq(y));
-#endif
-}
-
 inline float div0(float x, float y) {
 	XMVECTOR vy = _mm_set_ss(y);
 	XMVECTOR m = _mm_cmpneq_ss(vy, _mm_setzero_ps());
@@ -147,6 +139,20 @@ inline float div0(float x, float y) {
 }
 
 inline float rcp0(float x) { return div0(1.0f, x); }
+
+inline float hypot(float x, float y) {
+#if 0
+	return ::hypotf(x, y);
+#else
+	float m = max(::fabsf(x), ::fabsf(y));
+	float im = rcp0(m);
+	return ::sqrtf(sq(x*im) + sq(y*im)) * m;
+#endif
+}
+
+inline float hypot_fast(float x, float y) {
+	return ::sqrtf(sq(x) + sq(y));
+}
 
 inline float lerp(float a, float b, float t) { return a + (b - a)*t; }
 
